@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TapFI - Financial Independence Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 TapFI</h1>
+            <p class="subtitle">Track Your Journey to Financial Independence</p>
+        </header>
+
+        <!-- FI Target Configuration -->
+        <section class="fi-config card">
+            <h2>Financial Independence Goal</h2>
+            <div class="config-grid">
+                <div class="input-group">
+                    <label for="fiTarget">Target Amount ($)</label>
+                    <input type="number" id="fiTarget" placeholder="1000000" min="0" step="1000">
+                </div>
+                <div class="input-group">
+                    <label for="withdrawalRate">Withdrawal Rate (%)</label>
+                    <input type="number" id="withdrawalRate" placeholder="4" min="0" max="10" step="0.1" value="4">
+                </div>
+                <button id="saveConfig" class="btn btn-primary">Save Goal</button>
+            </div>
+        </section>
+
+        <!-- Dashboard Overview -->
+        <section class="dashboard card">
+            <h2>Portfolio Overview</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Net Worth</div>
+                    <div class="stat-value" id="totalNetWorth">$0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">FI Progress</div>
+                    <div class="stat-value" id="fiProgress">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Annual Income @ 4%</div>
+                    <div class="stat-value" id="annualIncome">$0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Remaining to Goal</div>
+                    <div class="stat-value" id="remainingAmount">$0</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="allocationChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Account Management -->
+        <section class="accounts card">
+            <h2>Accounts</h2>
+            
+            <!-- Add Account Forms -->
+            <div class="account-forms">
+                <!-- Manual Account Entry -->
+                <div class="form-section">
+                    <h3>Add Manual Account</h3>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label for="accountName">Account Name</label>
+                            <input type="text" id="accountName" placeholder="e.g., Schwab Brokerage">
+                        </div>
+                        <div class="input-group">
+                            <label for="accountType">Account Type</label>
+                            <select id="accountType">
+                                <option value="brokerage">Brokerage</option>
+                                <option value="401k">401(k)</option>
+                                <option value="ira">IRA</option>
+                                <option value="roth">Roth IRA</option>
+                                <option value="savings">Savings</option>
+                                <option value="crypto">Cryptocurrency</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="accountBalance">Balance ($)</label>
+                            <input type="number" id="accountBalance" placeholder="0" min="0" step="0.01">
+                        </div>
+                        <button id="addManualAccount" class="btn btn-primary">Add Account</button>
+                    </div>
+                </div>
+
+                <!-- Bitcoin Entry -->
+                <div class="form-section">
+                    <h3>Add Bitcoin Holdings</h3>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label for="btcAmount">Bitcoin Amount</label>
+                            <input type="number" id="btcAmount" placeholder="0.5" min="0" step="0.00000001">
+                        </div>
+                        <div class="input-group">
+                            <label for="btcPrice">Current BTC Price ($)</label>
+                            <input type="number" id="btcPrice" placeholder="40000" min="0" step="0.01">
+                        </div>
+                        <button id="addBitcoin" class="btn btn-primary">Add Bitcoin</button>
+                    </div>
+                </div>
+
+                <!-- CSV Import -->
+                <div class="form-section">
+                    <h3>Import from CSV</h3>
+                    <p class="help-text">
+                        <strong>Supported formats:</strong> Schwab and Fidelity account statements.<br>
+                        <strong>Schwab:</strong> Export "Positions" from your account dashboard.<br>
+                        <strong>Fidelity:</strong> Download "Positions" CSV from Portfolio tab.
+                    </p>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="csvFileInput" accept=".csv" class="file-input">
+                        <label for="csvFileInput" class="btn btn-secondary">Choose CSV File</label>
+                        <span id="fileName" class="file-name">No file chosen</span>
+                    </div>
+                    <button id="importCsv" class="btn btn-primary" disabled>Import CSV</button>
+                </div>
+            </div>
+
+            <!-- Accounts Table -->
+            <div class="accounts-table-wrapper">
+                <h3>Current Accounts</h3>
+                <table id="accountsTable" class="accounts-table">
+                    <thead>
+                        <tr>
+                            <th>Account Name</th>
+                            <th>Type</th>
+                            <th>Balance</th>
+                            <th>% of Total</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountsTableBody">
+                        <tr class="empty-state">
+                            <td colspan="5">No accounts added yet. Add your first account above!</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Data Management -->
+        <section class="data-management card">
+            <h2>Data Management</h2>
+            <div class="button-group">
+                <button id="exportData" class="btn btn-secondary">Export All Data (JSON)</button>
+                <button id="importData" class="btn btn-secondary">Import Data (JSON)</button>
+                <button id="clearData" class="btn btn-danger">Clear All Data</button>
+            </div>
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+        </section>
+
+        <footer>
+            <p>All data is stored locally in your browser. No data is sent to external servers.</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

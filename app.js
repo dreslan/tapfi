@@ -14,8 +14,11 @@ class FITracker {
         this.currentAge = 30;
         this.retirementAge = 65;
 
+        this.history = []; // Historical Net Worth snapshots
+
         this.chart = null;
         this.projectionChart = null;
+        this.historyChart = null;
         
         this.loadData();
         this.initializeEventListeners();
@@ -32,6 +35,7 @@ class FITracker {
                 this.fiTarget = data.fiTarget || 1000000;
                 this.withdrawalRate = data.withdrawalRate || 4;
                 this.annualExpenses = data.annualExpenses || 40000;
+                this.history = data.history || [];
                 
                 // Load Projections
                 this.monthlyContribution = data.monthlyContribution !== undefined ? data.monthlyContribution : 2000;
@@ -64,6 +68,7 @@ class FITracker {
             fiTarget: this.fiTarget,
             withdrawalRate: this.withdrawalRate,
             annualExpenses: this.annualExpenses,
+            history: this.history,
             
             // Save Projections
             monthlyContribution: this.monthlyContribution,
@@ -215,12 +220,22 @@ class FITracker {
             return;
         }
 
+        const id = Date.now();
         const account = {
-            id: Date.now(),
+            id: id,
+            number: `MANUAL-${id}`,
             name: name,
             type: type,
             balance: balance,
-            source: 'manual'
+            source: 'manual',
+            lastUpdated: new Date().toISOString(),
+            holdings: [{
+                symbol: '',
+                description: name,
+                quantity: 1,
+                value: balance,
+                assetClass: this.inferAssetClassFromType(type)
+            }]
         };
 
         this.accounts.push(account);
@@ -245,14 +260,24 @@ class FITracker {
         }
 
         const balance = amount * price;
+        const id = Date.now();
         const account = {
-            id: Date.now(),
+            id: id,
+            number: `BTC-${id}`,
             name: `Bitcoin (${amount.toFixed(8)} BTC)`,
             type: 'crypto',
             balance: balance,
             source: 'bitcoin',
             btcAmount: amount,
-            btcPrice: price
+            btcPrice: price,
+            lastUpdated: new Date().toISOString(),
+            holdings: [{
+                symbol: 'BTC',
+                description: 'Bitcoin',
+                quantity: amount,
+                value: balance,
+                assetClass: 'Crypto'
+            }]
         };
 
         this.accounts.push(account);
@@ -359,56 +384,112 @@ class FITracker {
 
     parseSchwabCSV(lines) {
         let importedCount = 0;
-        const accountTotals = new Map();
-        let currentAccount = null;
+        let currentAccountName = null;
+        let currentAccountNumber = null;
+        let currentHoldings = [];
+        
+        // Column indices (defaults based on sample)
+        let idx = {
+            symbol: 0,
+            description: 1,
+            qty: 2,
+            value: 6
+        };
+
+        // Helper to save the current account being processed
+        const saveCurrentAccount = () => {
+            if (currentAccountNumber && currentHoldings.length > 0) {
+                const totalBalance = currentHoldings.reduce((sum, h) => sum + h.value, 0);
+                const accountName = currentAccountName || `Schwab - ${currentAccountNumber}`;
+                
+                // Check if account exists by Number OR Name (legacy support)
+                let existingIndex = this.accounts.findIndex(acc => 
+                    (acc.number && String(acc.number) === String(currentAccountNumber)) ||
+                    (acc.name === `Schwab - ${currentAccountName}`)
+                );
+                
+                const accountData = {
+                    id: currentAccountNumber, // Use account number as ID
+                    number: currentAccountNumber,
+                    name: accountName,
+                    type: this.inferAccountType(currentAccountName || ''),
+                    balance: totalBalance,
+                    source: 'schwab_csv',
+                    holdings: currentHoldings,
+                    lastUpdated: new Date().toISOString()
+                };
+
+                if (existingIndex >= 0) {
+                    // Preserve original ID if updating legacy account to avoid duplicates
+                    const originalId = this.accounts[existingIndex].id;
+                    this.accounts[existingIndex] = { ...this.accounts[existingIndex], ...accountData, id: originalId };
+                } else {
+                    this.accounts.push(accountData);
+                }
+                importedCount++;
+            }
+        };
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
-            
-            // Skip empty lines
             if (!line) continue;
-            
-            // Look for lines that are account names (followed by account number pattern)
+
+            // Detect Account Header: "Tony_IRA ...689"
             const accountMatch = line.match(/^([^,]+?)\s+\.{3}(\d+)/);
             if (accountMatch) {
-                currentAccount = accountMatch[1].trim();
-                accountTotals.set(currentAccount, 0);
+                saveCurrentAccount();
+                currentAccountName = accountMatch[1].trim();
+                currentAccountNumber = accountMatch[2].trim();
+                currentHoldings = [];
                 continue;
             }
-            
-            // Check for "Account Total" lines that have the total value
-            if (line.includes('Account Total') && currentAccount) {
-                const cells = this.parseCSVLine(line);
-                // Find the market value - typically around index 6-7 in Schwab format
-                for (let j = 0; j < cells.length; j++) {
-                    const cell = cells[j]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
-                    // Look for the total dollar amount (should be after several "--" entries)
-                    if (cell && cell.match(/^\d+\.\d{2}$/) && parseFloat(cell) > 100) {
-                        const total = parseFloat(cell);
-                        if (!isNaN(total) && total > 0) {
-                            accountTotals.set(currentAccount, total);
-                            break;
-                        }
-                    }
-                }
+
+            // Detect Headers to update indices
+            if (line.toLowerCase().includes('"symbol"') && line.toLowerCase().includes('"description"')) {
+                const headers = this.parseCSVLine(line).map(h => h.toLowerCase().replace(/"/g, '').trim());
+                idx.symbol = headers.findIndex(h => h === 'symbol');
+                idx.description = headers.findIndex(h => h === 'description');
+                idx.qty = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
+                idx.value = headers.findIndex(h => h.includes('market value') || h.includes('mkt val'));
                 continue;
+            }
+
+            // Skip "Account Total" lines
+            if (line.includes('"Account Total"')) continue;
+
+            // Parse Data Rows
+            const cells = this.parseCSVLine(line);
+            
+            if (cells.length > idx.value && currentAccountNumber) {
+                const symbol = cells[idx.symbol]?.replace(/"/g, '').trim();
+                const description = cells[idx.description]?.replace(/"/g, '').trim();
+                
+                // Skip header rows if they appear again
+                if (symbol === 'Symbol' || description === 'Description') continue;
+
+                const qtyStr = cells[idx.qty]?.replace(/"/g, '').replace(/,/g, '');
+                const valStr = cells[idx.value]?.replace(/"/g, '').replace(/[$,]/g, '');
+                
+                const value = parseFloat(valStr);
+                
+                if (!isNaN(value) && value > 0) {
+                    let assetClass = 'Stock/ETF';
+                    if (symbol === 'Cash & Cash Investments' || description.includes('Cash') || description.includes('Money Market')) {
+                        assetClass = 'Cash';
+                    }
+
+                    currentHoldings.push({
+                        symbol: symbol === 'Cash & Cash Investments' ? 'CASH' : symbol,
+                        description: description,
+                        quantity: parseFloat(qtyStr) || 0,
+                        value: value,
+                        assetClass: assetClass
+                    });
+                }
             }
         }
-
-        // Create accounts from totals
-        accountTotals.forEach((balance, accountName) => {
-            if (balance > 0) {
-                const account = {
-                    id: Date.now() + importedCount,
-                    name: `Schwab - ${accountName}`,
-                    type: this.inferAccountType(accountName),
-                    balance: balance,
-                    source: 'schwab_csv'
-                };
-                this.accounts.push(account);
-                importedCount++;
-            }
-        });
+        
+        saveCurrentAccount();
 
         return importedCount;
     }
@@ -416,67 +497,94 @@ class FITracker {
     parseFidelityCSV(lines, headers) {
         const accountNumIdx = headers.findIndex(h => h.includes('account number'));
         const accountNameIdx = headers.findIndex(h => h.includes('account name'));
+        const symbolIdx = headers.findIndex(h => h.includes('symbol'));
         const descriptionIdx = headers.findIndex(h => h.includes('description'));
+        const quantityIdx = headers.findIndex(h => h.includes('quantity'));
         const valueIdx = headers.findIndex(h => h.includes('current value'));
+        const typeIdx = headers.findIndex(h => h.includes('type')); // Sometimes present
         
         let importedCount = 0;
-        const accountTotals = new Map();
-        const brokerageLinkAccounts = new Set();
+        const accountsMap = new Map(); // Map<AccountNumber, AccountData>
 
-        // First pass: identify BROKERAGELINK placeholder rows
+        // Iterate rows
         for (let i = 1; i < lines.length; i++) {
             const cells = this.parseCSVLine(lines[i]);
             
-            if (cells.length > Math.max(accountNumIdx, descriptionIdx)) {
-                const description = cells[descriptionIdx]?.replace(/"/g, '').trim().toUpperCase();
-                const accountNum = cells[accountNumIdx]?.replace(/"/g, '').trim();
-                
-                if (description === 'BROKERAGELINK' && accountNum) {
-                    brokerageLinkAccounts.add(accountNum);
-                }
-            }
-        }
-
-        // Second pass: aggregate values, skipping BROKERAGELINK placeholder rows
-        for (let i = 1; i < lines.length; i++) {
-            const cells = this.parseCSVLine(lines[i]);
-            
-            if (cells.length > Math.max(accountNumIdx, accountNameIdx, valueIdx)) {
+            if (cells.length > Math.max(accountNumIdx, valueIdx)) {
                 const accountNum = cells[accountNumIdx]?.replace(/"/g, '').trim();
                 const accountName = cells[accountNameIdx]?.replace(/"/g, '').trim();
-                const description = cells[descriptionIdx]?.replace(/"/g, '').trim().toUpperCase();
+                const description = cells[descriptionIdx]?.replace(/"/g, '').trim();
+                const symbol = cells[symbolIdx]?.replace(/"/g, '').trim();
                 const valueStr = cells[valueIdx]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
                 const value = parseFloat(valueStr);
+                const type = (typeIdx >= 0 && cells[typeIdx]) ? cells[typeIdx].replace(/"/g, '').trim() : '';
 
-                // Skip BROKERAGELINK placeholder rows (they're summaries of other accounts)
-                if (description === 'BROKERAGELINK') {
+                // Skip BROKERAGELINK summary rows (keep the detail rows)
+                if (description === 'BROKERAGELINK' && !symbol) {
                     continue;
                 }
 
-                // Skip empty rows
+                // Skip empty rows or invalid accounts
                 if (!accountNum || !accountName) {
                     continue;
                 }
 
                 if (!isNaN(value) && value > 0) {
-                    const key = `${accountNum}|${accountName}`;
-                    accountTotals.set(key, (accountTotals.get(key) || 0) + value);
+                    if (!accountsMap.has(accountNum)) {
+                        accountsMap.set(accountNum, {
+                            name: accountName,
+                            holdings: []
+                        });
+                    }
+
+                    // Infer Asset Class
+                    let assetClass = 'Stock/ETF';
+                    if ((type && type.toLowerCase().includes('cash')) || symbol === 'FDRXX' || description.includes('MONEY MARKET') || description.includes('Cash')) {
+                        assetClass = 'Cash';
+                    }
+
+                    accountsMap.get(accountNum).holdings.push({
+                        symbol: symbol,
+                        description: description,
+                        quantity: parseFloat(cells[quantityIdx]?.replace(/"/g, '')) || 0,
+                        value: value,
+                        assetClass: assetClass
+                    });
                 }
             }
         }
 
-        // Create accounts from aggregated totals
-        accountTotals.forEach((balance, key) => {
-            const [accountNum, accountName] = key.split('|');
-            if (balance > 0) {
-                const account = {
-                    id: Date.now() + importedCount,
-                    name: `Fidelity - ${accountName}`,
-                    type: this.inferAccountType(accountName),
-                    balance: balance,
-                    source: 'fidelity_csv'
+        // Create/Update accounts
+        accountsMap.forEach((data, accountNum) => {
+            const totalBalance = data.holdings.reduce((sum, h) => sum + h.value, 0);
+            
+            if (totalBalance > 0) {
+                const accountName = `Fidelity - ${data.name}`;
+                
+                // Check if account exists by Number OR Name (legacy support)
+                let existingIndex = this.accounts.findIndex(acc => 
+                    (acc.number && String(acc.number) === String(accountNum)) ||
+                    (acc.name === accountName)
+                );
+                
+                const accountData = {
+                    id: accountNum,
+                    number: accountNum,
+                    name: accountName,
+                    type: this.inferAccountType(data.name),
+                    balance: totalBalance,
+                    source: 'fidelity_csv',
+                    holdings: data.holdings,
+                    lastUpdated: new Date().toISOString()
                 };
-                this.accounts.push(account);
+
+                if (existingIndex >= 0) {
+                    // Preserve original ID if updating legacy account
+                    const originalId = this.accounts[existingIndex].id;
+                    this.accounts[existingIndex] = { ...this.accounts[existingIndex], ...accountData, id: originalId };
+                } else {
+                    this.accounts.push(accountData);
+                }
                 importedCount++;
             }
         });
@@ -547,11 +655,151 @@ class FITracker {
         // Update accounts table
         this.updateAccountsTable();
 
-        // Update chart
+        // Update Holdings
+        this.renderHoldings();
+
+        // Update charts
         this.updateAllocationChart();
+        
+        // Update History
+        this.updateHistory(totalNetWorth);
+        this.renderHistoryChart();
 
         // Update Projections
         this.updateProjections(totalNetWorth);
+    }
+
+    updateHistory(currentNetWorth) {
+        const today = new Date().toISOString().split('T')[0];
+        const lastEntry = this.history[this.history.length - 1];
+
+        if (!lastEntry || lastEntry.date !== today) {
+            this.history.push({ date: today, netWorth: currentNetWorth });
+        } else {
+            lastEntry.netWorth = currentNetWorth;
+        }
+        
+        // Keep history sorted just in case
+        this.history.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Save is handled by caller usually, but let's ensure it's saved if we modified it
+        // However, updateDashboard is called often, so we don't want to loop save.
+        // We'll rely on the fact that updateDashboard is usually called after a change that triggers save.
+        // But if we just loaded the page and updated history, we might want to save.
+        // For now, let's leave explicit saving to the actions.
+    }
+
+    renderHistoryChart() {
+        const ctx = document.getElementById('historyChart');
+        if (!ctx) return;
+
+        const labels = this.history.map(h => h.date);
+        const data = this.history.map(h => h.netWorth);
+
+        if (this.historyChart) {
+            this.historyChart.data.labels = labels;
+            this.historyChart.data.datasets[0].data = data;
+            this.historyChart.update();
+        } else {
+            this.historyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Net Worth History',
+                        data: data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Net Worth History',
+                            color: '#e5e7eb'
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    if (value >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return '$' + (value / 1000).toFixed(0) + 'k';
+                                    return '$' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    renderHoldings() {
+        const tbody = document.getElementById('holdingsList');
+        if (!tbody) return;
+
+        // Aggregate holdings
+        const holdingsMap = new Map();
+
+        this.accounts.forEach(acc => {
+            if (acc.holdings && Array.isArray(acc.holdings) && acc.holdings.length > 0) {
+                acc.holdings.forEach(h => {
+                    const key = h.symbol || h.description; // Fallback if symbol is missing
+                    if (!holdingsMap.has(key)) {
+                        holdingsMap.set(key, {
+                            symbol: h.symbol,
+                            description: h.description,
+                            assetClass: h.assetClass || 'Unknown',
+                            value: 0
+                        });
+                    }
+                    holdingsMap.get(key).value += h.value;
+                });
+            } else if (acc.balance > 0) {
+                // Handle accounts without detailed holdings (e.g. manual entry)
+                const key = acc.name;
+                if (!holdingsMap.has(key)) {
+                    holdingsMap.set(key, {
+                        symbol: '',
+                        description: acc.name,
+                        assetClass: this.inferAssetClassFromType(acc.type),
+                        value: 0
+                    });
+                }
+                holdingsMap.get(key).value += acc.balance;
+            }
+        });
+
+        const totalNetWorth = this.calculateTotalNetWorth();
+        const sortedHoldings = Array.from(holdingsMap.values()).sort((a, b) => b.value - a.value);
+
+        tbody.innerHTML = sortedHoldings.map(h => {
+            const percentage = totalNetWorth > 0 ? (h.value / totalNetWorth * 100).toFixed(2) : 0;
+            return `
+                <tr>
+                    <td>${h.symbol || '-'}</td>
+                    <td>${h.description}</td>
+                    <td>${h.assetClass}</td>
+                    <td>${this.formatCurrency(h.value)}</td>
+                    <td>${percentage}%</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    inferAssetClassFromType(type) {
+        if (type === 'crypto') return 'Crypto';
+        if (type === 'cash' || type === 'savings') return 'Cash';
+        return 'Other';
     }
 
     calculateTotalNetWorth() {
@@ -567,18 +815,52 @@ class FITracker {
             return;
         }
 
-        tbody.innerHTML = this.accounts.map(account => {
-            const percentage = totalNetWorth > 0 ? (account.balance / totalNetWorth * 100).toFixed(1) : 0;
-            return `
-                <tr>
-                    <td>${this.escapeHtml(account.name)}</td>
-                    <td><span class="account-type-badge ${account.type}">${this.formatAccountType(account.type)}</span></td>
-                    <td>${this.formatCurrency(account.balance)}</td>
-                    <td>${percentage}%</td>
-                    <td><button class="btn btn-danger btn-sm" onclick="tracker.deleteAccount(${account.id})">Delete</button></td>
+        // Group accounts
+        const groups = {};
+        this.accounts.forEach(acc => {
+            const type = this.formatAccountType(acc.type);
+            if (!groups[type]) groups[type] = [];
+            groups[type].push(acc);
+        });
+
+        let html = '';
+        
+        Object.keys(groups).sort().forEach(groupName => {
+            const groupAccounts = groups[groupName];
+            const groupTotal = groupAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+            
+            // Group Header
+            html += `
+                <tr class="group-header">
+                    <td colspan="5" style="background-color: rgba(255,255,255,0.05); font-weight: bold; padding-top: 1rem;">
+                        ${groupName} <span style="font-weight: normal; opacity: 0.7">(${this.formatCurrency(groupTotal)})</span>
+                    </td>
                 </tr>
             `;
-        }).join('');
+
+            // Accounts
+            groupAccounts.forEach(account => {
+                const percentage = totalNetWorth > 0 ? (account.balance / totalNetWorth * 100).toFixed(1) : 0;
+                const lastUpdated = account.lastUpdated ? new Date(account.lastUpdated).toLocaleDateString() : 'N/A';
+                
+                html += `
+                    <tr>
+                        <td style="padding-left: 1.5rem;">
+                            ${this.escapeHtml(account.name)}
+                            <div style="font-size: 0.75rem; opacity: 0.6;">Updated: ${lastUpdated}</div>
+                        </td>
+                        <td><span class="account-type-badge ${account.type}">${this.formatAccountType(account.type)}</span></td>
+                        <td>${this.formatCurrency(account.balance)}</td>
+                        <td>${percentage}%</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="tracker.deleteAccount('${account.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+
+        tbody.innerHTML = html;
     }
 
     updateAllocationChart() {

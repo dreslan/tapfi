@@ -298,11 +298,16 @@ select:focus {
 }
 
 /* ===== Table ===== */
+.table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+}
+
 .accounts-table-wrapper {
     margin-top: 30px;
 }
 
-.accounts-table {
+.accounts-table, #holdingsTable {
     width: 100%;
     border-collapse: collapse;
     background: var(--bg-dark);
@@ -310,11 +315,11 @@ select:focus {
     overflow: hidden;
 }
 
-.accounts-table thead {
+.accounts-table thead, #holdingsTable thead {
     background: var(--bg-card-hover);
 }
 
-.accounts-table th {
+.accounts-table th, #holdingsTable th {
     padding: 15px;
     text-align: left;
     color: var(--text-secondary);
@@ -324,18 +329,27 @@ select:focus {
     letter-spacing: 0.5px;
 }
 
-.accounts-table td {
+.accounts-table td, #holdingsTable td {
     padding: 15px;
     border-top: 1px solid var(--border-color);
     color: var(--text-primary);
 }
 
-.accounts-table tbody tr {
+.accounts-table tbody tr, #holdingsTable tbody tr {
     transition: background-color 0.2s;
 }
 
-.accounts-table tbody tr:hover {
+.accounts-table tbody tr:hover, #holdingsTable tbody tr:hover {
     background: var(--bg-card-hover);
+}
+
+/* Group Header Styling */
+.group-header td {
+    background-color: rgba(255, 255, 255, 0.05);
+    font-weight: bold;
+    padding-top: 1rem;
+    color: var(--text-primary);
+    border-top: 2px solid var(--border-color);
 }
 
 .empty-state {

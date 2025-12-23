@@ -62,10 +62,29 @@
             <div class="chart-container">
                 <canvas id="allocationChart"></canvas>
             </div>
+            <div class="chart-container" style="margin-top: 2rem;">
+                <canvas id="historyChart"></canvas>
+            </div>
         </section>
 
-            <div class="chart-container">
-                <canvas id="allocationChart"></canvas>
+        <!-- Holdings Overview -->
+        <section class="holdings card">
+            <h2>Holdings</h2>
+            <div class="table-container">
+                <table id="holdingsTable">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Description</th>
+                            <th>Asset Class</th>
+                            <th>Value</th>
+                            <th>% of Portfolio</th>
+                        </tr>
+                    </thead>
+                    <tbody id="holdingsList">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
             </div>
         </section>
 

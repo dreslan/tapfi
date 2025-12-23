@@ -177,6 +177,32 @@ class FITracker {
         });
         document.getElementById('jsonFileInput').addEventListener('change', (e) => this.importDataFile(e));
         document.getElementById('clearData').addEventListener('click', () => this.clearAllData());
+
+        // History Management
+        const modal = document.getElementById('historyModal');
+        const btn = document.getElementById('manageHistoryBtn');
+        const span = document.querySelector('.close-modal');
+
+        if (btn) {
+            btn.addEventListener('click', () => {
+                this.renderHistoryTable();
+                modal.classList.add('show');
+            });
+        }
+
+        if (span) {
+            span.addEventListener('click', () => {
+                modal.classList.remove('show');
+            });
+        }
+
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.classList.remove('show');
+            }
+        });
+
+        document.getElementById('addHistoryEntry').addEventListener('click', () => this.addHistoryEntry());
     }
 
     // ===== FI Configuration =====
@@ -1128,6 +1154,88 @@ class FITracker {
     clearBitcoinForm() {
         document.getElementById('btcAmount').value = '';
         document.getElementById('btcPrice').value = '';
+    }
+
+    // ===== History Management =====
+    addHistoryEntry() {
+        const dateInput = document.getElementById('historyDate');
+        const amountInput = document.getElementById('historyAmount');
+        
+        const date = dateInput.value;
+        const amount = this.parseInputCurrency(amountInput.value);
+
+        if (!date) {
+            alert('Please select a date');
+            return;
+        }
+
+        if (isNaN(amount)) {
+            alert('Please enter a valid amount');
+            return;
+        }
+
+        // Check if entry exists for this date
+        const existingIndex = this.history.findIndex(h => h.date === date);
+        
+        if (existingIndex >= 0) {
+            if (confirm(`An entry for ${date} already exists. Overwrite?`)) {
+                this.history[existingIndex].netWorth = amount;
+            } else {
+                return;
+            }
+        } else {
+            this.history.push({ date: date, netWorth: amount });
+        }
+
+        // Sort history
+        this.history.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        this.saveData();
+        this.renderHistoryTable();
+        this.renderHistoryChart();
+        
+        // Clear inputs
+        dateInput.value = '';
+        amountInput.value = '';
+        
+        this.showNotification('History entry added');
+    }
+
+    deleteHistoryEntry(index) {
+        if (confirm('Delete this history entry?')) {
+            this.history.splice(index, 1);
+            this.saveData();
+            this.renderHistoryTable();
+            this.renderHistoryChart();
+        }
+    }
+
+    renderHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        if (!tbody) return;
+
+        if (this.history.length === 0) {
+            tbody.innerHTML = '<tr class="empty-state"><td colspan="3">No history data available</td></tr>';
+            return;
+        }
+
+        // Sort descending for table view
+        const sortedHistory = [...this.history].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        tbody.innerHTML = sortedHistory.map((entry, index) => {
+            // Calculate original index for deletion
+            const originalIndex = this.history.findIndex(h => h.date === entry.date);
+            
+            return `
+                <tr>
+                    <td>${entry.date}</td>
+                    <td>${this.formatCurrency(entry.netWorth)}</td>
+                    <td>
+                        <button class="btn btn-danger btn-sm" onclick="tracker.deleteHistoryEntry(${originalIndex})">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
     }
 
     // ===== Projections & Simulations =====

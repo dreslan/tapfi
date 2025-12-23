@@ -62,10 +62,51 @@
             <div class="chart-container">
                 <canvas id="allocationChart"></canvas>
             </div>
-            <div class="chart-container" style="margin-top: 2rem;">
+            <div class="chart-container" style="margin-top: 2rem; height: 300px; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Net Worth History</h3>
+                    <button id="manageHistoryBtn" class="btn btn-secondary btn-sm">Manage Data</button>
+                </div>
                 <canvas id="historyChart"></canvas>
             </div>
         </section>
+
+        <!-- History Modal -->
+        <div id="historyModal" class="modal">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h2>History Data</h2>
+                    <span class="close-modal">&times;</span>
+                </div>
+                
+                <div class="form-grid" style="margin-bottom: 20px;">
+                    <div class="input-group">
+                        <label for="historyDate">Date</label>
+                        <input type="date" id="historyDate">
+                    </div>
+                    <div class="input-group">
+                        <label for="historyAmount">Net Worth ($)</label>
+                        <input type="text" id="historyAmount" data-type="currency" placeholder="0.00">
+                    </div>
+                    <button id="addHistoryEntry" class="btn btn-primary" style="align-self: end;">Add Entry</button>
+                </div>
+
+                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                    <table class="accounts-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Net Worth</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
         <!-- Holdings Overview -->
         <section class="holdings card">
@@ -146,7 +187,7 @@
                 </div>
             </div>
 
-            <div class="chart-container">
+            <div class="chart-container" style="height: 400px; position: relative;">
                 <canvas id="projectionChart"></canvas>
             </div>
         </section>

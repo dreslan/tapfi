@@ -40,14 +40,14 @@ class FITracker {
                 this.retirementAge = data.retirementAge !== undefined ? data.retirementAge : 65;
 
                 // Populate config inputs
-                document.getElementById('fiTarget').value = this.fiTarget;
+                document.getElementById('fiTarget').value = this.formatInputCurrency(this.fiTarget);
                 document.getElementById('withdrawalRate').value = this.withdrawalRate;
-                document.getElementById('annualExpenses').value = this.annualExpenses;
+                document.getElementById('annualExpenses').value = this.formatInputCurrency(this.annualExpenses);
                 
                 // Populate projection inputs
                 const mcInput = document.getElementById('monthlyContribution');
                 if (mcInput) {
-                    mcInput.value = this.monthlyContribution;
+                    mcInput.value = this.formatInputCurrency(this.monthlyContribution);
                     document.getElementById('annualReturn').value = this.annualReturn;
                     document.getElementById('currentAge').value = this.currentAge;
                     document.getElementById('retirementAge').value = this.retirementAge;
@@ -78,36 +78,56 @@ class FITracker {
 
     // ===== Event Listeners =====
     initializeEventListeners() {
+        // Currency Input Formatting
+        document.querySelectorAll('input[data-type="currency"]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                this.handleCurrencyInput(e.target);
+            });
+            // Keep blur to ensure clean formatting (e.g. remove trailing dots)
+            input.addEventListener('blur', (e) => {
+                const val = this.parseInputCurrency(e.target.value);
+                e.target.value = this.formatInputCurrency(val);
+            });
+        });
+
         // FI Config
         document.getElementById('saveConfig').addEventListener('click', () => this.saveFIConfig());
         
         // Auto-calculate Target from Expenses
         document.getElementById('annualExpenses').addEventListener('input', (e) => {
-            const expenses = parseFloat(e.target.value);
+            const expenses = this.parseInputCurrency(e.target.value);
             const rate = parseFloat(document.getElementById('withdrawalRate').value);
             if (expenses && rate) {
                 const target = expenses / (rate / 100);
-                document.getElementById('fiTarget').value = Math.round(target);
+                // Only update if not focused to avoid fighting the user
+                const targetInput = document.getElementById('fiTarget');
+                if (document.activeElement !== targetInput) {
+                    targetInput.value = this.formatInputCurrency(Math.round(target));
+                }
             }
         });
 
         // Auto-calculate Target from Rate (if Expenses exist)
         document.getElementById('withdrawalRate').addEventListener('input', (e) => {
             const rate = parseFloat(e.target.value);
-            const expenses = parseFloat(document.getElementById('annualExpenses').value);
+            const expenses = this.parseInputCurrency(document.getElementById('annualExpenses').value);
             if (expenses && rate) {
                 const target = expenses / (rate / 100);
-                document.getElementById('fiTarget').value = Math.round(target);
+                document.getElementById('fiTarget').value = this.formatInputCurrency(Math.round(target));
             }
         });
 
         // Auto-calculate Expenses from Target (Reverse calculation)
         document.getElementById('fiTarget').addEventListener('input', (e) => {
-            const target = parseFloat(e.target.value);
+            const target = this.parseInputCurrency(e.target.value);
             const rate = parseFloat(document.getElementById('withdrawalRate').value);
             if (target && rate) {
                 const expenses = target * (rate / 100);
-                document.getElementById('annualExpenses').value = Math.round(expenses);
+                // Only update if not focused
+                const expensesInput = document.getElementById('annualExpenses');
+                if (document.activeElement !== expensesInput) {
+                    expensesInput.value = this.formatInputCurrency(Math.round(expenses));
+                }
             }
         });
 
@@ -116,10 +136,22 @@ class FITracker {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('input', () => {
-                    this[id] = parseFloat(el.value) || 0;
+                    // Handle currency inputs specially
+                    if (el.dataset.type === 'currency') {
+                        this[id] = this.parseInputCurrency(el.value);
+                    } else {
+                        this[id] = parseFloat(el.value) || 0;
+                    }
                     this.saveData();
                     this.updateDashboard(); // Real-time updates
                 });
+                
+                // For currency inputs, also update on blur to format
+                if (el.dataset.type === 'currency') {
+                    el.addEventListener('blur', () => {
+                        el.value = this.formatInputCurrency(this[id]);
+                    });
+                }
             }
         });
 
@@ -144,9 +176,9 @@ class FITracker {
 
     // ===== FI Configuration =====
     saveFIConfig() {
-        const target = parseFloat(document.getElementById('fiTarget').value);
+        const target = this.parseInputCurrency(document.getElementById('fiTarget').value);
         const rate = parseFloat(document.getElementById('withdrawalRate').value);
-        const expenses = parseFloat(document.getElementById('annualExpenses').value);
+        const expenses = this.parseInputCurrency(document.getElementById('annualExpenses').value);
 
         if (isNaN(target) || target <= 0) {
             alert('Please enter a valid target amount');
@@ -171,7 +203,7 @@ class FITracker {
     addManualAccount() {
         const name = document.getElementById('accountName').value.trim();
         const type = document.getElementById('accountType').value;
-        const balance = parseFloat(document.getElementById('accountBalance').value);
+        const balance = this.parseInputCurrency(document.getElementById('accountBalance').value);
 
         if (!name) {
             alert('Please enter an account name');
@@ -707,6 +739,68 @@ class FITracker {
         }).format(amount);
     }
 
+    // Format number with commas for input fields (no symbol)
+    formatInputCurrency(amount) {
+        if (amount === undefined || amount === null || isNaN(amount)) return '';
+        return new Intl.NumberFormat('en-US', {
+            maximumFractionDigits: 2
+        }).format(amount);
+    }
+
+    // Parse currency string (remove commas) to float
+    parseInputCurrency(value) {
+        if (!value) return 0;
+        if (typeof value === 'number') return value;
+        return parseFloat(value.replace(/,/g, '')) || 0;
+    }
+
+    // Real-time formatting for input fields
+    handleCurrencyInput(input) {
+        const cursor = input.selectionStart;
+        const oldVal = input.value;
+        
+        // Strip non-numeric/non-dot
+        let raw = oldVal.replace(/[^0-9.]/g, '');
+        
+        // Handle multiple dots
+        const parts = raw.split('.');
+        if (parts.length > 2) {
+            raw = parts[0] + '.' + parts.slice(1).join('');
+        }
+        
+        // Format integer part
+        const dotIndex = raw.indexOf('.');
+        let integerPart = dotIndex === -1 ? raw : raw.substring(0, dotIndex);
+        let decimalPart = dotIndex === -1 ? '' : raw.substring(dotIndex);
+        
+        // Remove leading zeros
+        if (integerPart.length > 1 && integerPart.startsWith('0')) {
+            integerPart = integerPart.replace(/^0+/, '');
+        }
+        
+        // Add commas
+        const formattedInt = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        const newVal = formattedInt + decimalPart;
+        
+        if (newVal !== oldVal) {
+            input.value = newVal;
+            
+            // Restore cursor position
+            // Count non-comma chars before cursor in old string
+            const nonCommasBefore = oldVal.slice(0, cursor).replace(/,/g, '').length;
+            
+            // Find position in new string with same number of non-comma chars
+            let newCursor = 0;
+            let count = 0;
+            for (let i = 0; i < newVal.length; i++) {
+                if (newVal[i] !== ',') count++;
+                newCursor++;
+                if (count === nonCommasBefore) break;
+            }
+            input.setSelectionRange(newCursor, newCursor);
+        }
+    }
+
     formatAccountType(type) {
         const types = {
             'brokerage': 'Brokerage',
@@ -777,6 +871,23 @@ class FITracker {
         const fiDays = this.fiTarget > 0 ? (currentNetWorth / this.fiTarget) * 365 : 0;
         const fiDaysEl = document.getElementById('fiDays');
         if (fiDaysEl) fiDaysEl.textContent = Math.floor(fiDays);
+
+        // Financial Runway (Net Worth / Annual Expenses)
+        const runway = this.annualExpenses > 0 ? currentNetWorth / this.annualExpenses : 0;
+        const runwayEl = document.getElementById('financialRunway');
+        if (runwayEl) runwayEl.textContent = runway.toFixed(1) + ' Years';
+
+        // Passive Wage ((Net Worth * Return) / 8760 hours)
+        const passiveIncome = currentNetWorth * (this.annualReturn / 100);
+        const hourlyWage = passiveIncome / 8760;
+        const wageEl = document.getElementById('passiveWage');
+        if (wageEl) wageEl.textContent = '$' + hourlyWage.toFixed(2) + '/hr';
+
+        // Barista Gap ((Expenses - Safe Withdrawal Amount) / 12)
+        const safeWithdrawalAmount = currentNetWorth * (this.withdrawalRate / 100);
+        const monthlyGap = Math.max(0, (this.annualExpenses - safeWithdrawalAmount) / 12);
+        const gapEl = document.getElementById('baristaGap');
+        if (gapEl) gapEl.textContent = this.formatCurrency(monthlyGap);
     }
 
     updateProjectionChart(currentNetWorth) {

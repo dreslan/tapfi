@@ -6,7 +6,17 @@ class FITracker {
         this.accounts = [];
         this.fiTarget = 1000000;
         this.withdrawalRate = 4;
+        this.annualExpenses = 40000;
+        
+        // Projections defaults
+        this.monthlyContribution = 2000;
+        this.annualReturn = 7;
+        this.currentAge = 30;
+        this.retirementAge = 65;
+
         this.chart = null;
+        this.projectionChart = null;
+        
         this.loadData();
         this.initializeEventListeners();
         this.updateDashboard();
@@ -21,10 +31,27 @@ class FITracker {
                 this.accounts = data.accounts || [];
                 this.fiTarget = data.fiTarget || 1000000;
                 this.withdrawalRate = data.withdrawalRate || 4;
+                this.annualExpenses = data.annualExpenses || 40000;
                 
+                // Load Projections
+                this.monthlyContribution = data.monthlyContribution !== undefined ? data.monthlyContribution : 2000;
+                this.annualReturn = data.annualReturn !== undefined ? data.annualReturn : 7;
+                this.currentAge = data.currentAge !== undefined ? data.currentAge : 30;
+                this.retirementAge = data.retirementAge !== undefined ? data.retirementAge : 65;
+
                 // Populate config inputs
                 document.getElementById('fiTarget').value = this.fiTarget;
                 document.getElementById('withdrawalRate').value = this.withdrawalRate;
+                document.getElementById('annualExpenses').value = this.annualExpenses;
+                
+                // Populate projection inputs
+                const mcInput = document.getElementById('monthlyContribution');
+                if (mcInput) {
+                    mcInput.value = this.monthlyContribution;
+                    document.getElementById('annualReturn').value = this.annualReturn;
+                    document.getElementById('currentAge').value = this.currentAge;
+                    document.getElementById('retirementAge').value = this.retirementAge;
+                }
             } catch (e) {
                 console.error('Error loading data:', e);
             }
@@ -36,6 +63,14 @@ class FITracker {
             accounts: this.accounts,
             fiTarget: this.fiTarget,
             withdrawalRate: this.withdrawalRate,
+            annualExpenses: this.annualExpenses,
+            
+            // Save Projections
+            monthlyContribution: this.monthlyContribution,
+            annualReturn: this.annualReturn,
+            currentAge: this.currentAge,
+            retirementAge: this.retirementAge,
+
             lastUpdated: new Date().toISOString()
         };
         localStorage.setItem('tapfi_data', JSON.stringify(data));
@@ -45,6 +80,48 @@ class FITracker {
     initializeEventListeners() {
         // FI Config
         document.getElementById('saveConfig').addEventListener('click', () => this.saveFIConfig());
+        
+        // Auto-calculate Target from Expenses
+        document.getElementById('annualExpenses').addEventListener('input', (e) => {
+            const expenses = parseFloat(e.target.value);
+            const rate = parseFloat(document.getElementById('withdrawalRate').value);
+            if (expenses && rate) {
+                const target = expenses / (rate / 100);
+                document.getElementById('fiTarget').value = Math.round(target);
+            }
+        });
+
+        // Auto-calculate Target from Rate (if Expenses exist)
+        document.getElementById('withdrawalRate').addEventListener('input', (e) => {
+            const rate = parseFloat(e.target.value);
+            const expenses = parseFloat(document.getElementById('annualExpenses').value);
+            if (expenses && rate) {
+                const target = expenses / (rate / 100);
+                document.getElementById('fiTarget').value = Math.round(target);
+            }
+        });
+
+        // Auto-calculate Expenses from Target (Reverse calculation)
+        document.getElementById('fiTarget').addEventListener('input', (e) => {
+            const target = parseFloat(e.target.value);
+            const rate = parseFloat(document.getElementById('withdrawalRate').value);
+            if (target && rate) {
+                const expenses = target * (rate / 100);
+                document.getElementById('annualExpenses').value = Math.round(expenses);
+            }
+        });
+
+        // Projections Inputs
+        ['monthlyContribution', 'annualReturn', 'currentAge', 'retirementAge'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', () => {
+                    this[id] = parseFloat(el.value) || 0;
+                    this.saveData();
+                    this.updateDashboard(); // Real-time updates
+                });
+            }
+        });
 
         // Manual Account
         document.getElementById('addManualAccount').addEventListener('click', () => this.addManualAccount());
@@ -69,6 +146,7 @@ class FITracker {
     saveFIConfig() {
         const target = parseFloat(document.getElementById('fiTarget').value);
         const rate = parseFloat(document.getElementById('withdrawalRate').value);
+        const expenses = parseFloat(document.getElementById('annualExpenses').value);
 
         if (isNaN(target) || target <= 0) {
             alert('Please enter a valid target amount');
@@ -82,6 +160,8 @@ class FITracker {
 
         this.fiTarget = target;
         this.withdrawalRate = rate;
+        this.annualExpenses = expenses || (target * (rate / 100));
+        
         this.saveData();
         this.updateDashboard();
         this.showNotification('FI goal saved successfully!');
@@ -186,19 +266,31 @@ class FITracker {
             return;
         }
 
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+        // For Schwab, skip any title/header lines and find the first actual data section
+        let firstLine = lines[0];
+        let isSchwab = false;
+        let isFidelity = false;
         
-        // Detect format
-        const isSchwab = this.detectSchwabFormat(headers);
-        const isFidelity = this.detectFidelityFormat(headers);
+        // Check if this looks like a Schwab file (has title line or account sections)
+        if (firstLine.toLowerCase().includes('positions for') || 
+            lines.some(line => line.match(/^\w+.*\.{3}\d+/))) {
+            isSchwab = true;
+        } else {
+            // Try to detect from headers
+            const headers = firstLine.split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+            isSchwab = this.detectSchwabFormat(headers);
+            isFidelity = this.detectFidelityFormat(headers);
+        }
 
         let importedCount = 0;
 
         if (isSchwab) {
-            importedCount = this.parseSchwabCSV(lines, headers);
+            importedCount = this.parseSchwabCSV(lines);
         } else if (isFidelity) {
+            const headers = firstLine.split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
             importedCount = this.parseFidelityCSV(lines, headers);
         } else {
+            const headers = firstLine.split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
             alert('Unrecognized CSV format. Please use Schwab or Fidelity position exports.\n\nHeaders found: ' + headers.join(', '));
             return;
         }
@@ -206,7 +298,7 @@ class FITracker {
         if (importedCount > 0) {
             this.saveData();
             this.updateDashboard();
-            this.showNotification(`Successfully imported ${importedCount} position(s) from ${isSchwab ? 'Schwab' : 'Fidelity'}`);
+            this.showNotification(`Successfully imported ${importedCount} account(s) from ${isSchwab ? 'Schwab' : 'Fidelity'}`);
             
             // Reset file input
             document.getElementById('csvFileInput').value = '';
@@ -218,97 +310,156 @@ class FITracker {
     }
 
     detectSchwabFormat(headers) {
-        // Schwab typically has: Symbol, Description, Quantity, Price, Market Value, etc.
-        const schwabIndicators = ['symbol', 'quantity', 'market value'];
+        // Schwab typically has: Symbol, Description, Quantity, Price, Mkt Val, etc.
+        const schwabIndicators = ['symbol', 'mkt val'];
         return schwabIndicators.every(indicator => 
             headers.some(h => h.includes(indicator))
         );
     }
 
     detectFidelityFormat(headers) {
-        // Fidelity typically has: Account Name, Symbol, Description, Quantity, Current Value, etc.
-        const fidelityIndicators = ['account name', 'current value'];
+        // Fidelity typically has: Account Number, Account Name, Symbol, Current Value, etc.
+        const fidelityIndicators = ['account number', 'account name', 'current value'];
         return fidelityIndicators.every(indicator => 
             headers.some(h => h.includes(indicator))
         );
     }
 
-    parseSchwabCSV(lines, headers) {
-        const symbolIdx = headers.findIndex(h => h.includes('symbol'));
-        const descIdx = headers.findIndex(h => h.includes('description'));
-        const valueIdx = headers.findIndex(h => h.includes('market value') || h.includes('value'));
-        
+    parseSchwabCSV(lines) {
         let importedCount = 0;
-        const accountName = `Schwab Import ${new Date().toLocaleDateString()}`;
+        const accountTotals = new Map();
+        let currentAccount = null;
 
-        // Aggregate total value
-        let totalValue = 0;
-
-        for (let i = 1; i < lines.length; i++) {
-            const cells = this.parseCSVLine(lines[i]);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
             
-            if (cells.length > Math.max(symbolIdx, valueIdx)) {
-                const symbol = cells[symbolIdx]?.replace(/"/g, '').trim();
-                const valueStr = cells[valueIdx]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
-                const value = parseFloat(valueStr);
-
-                if (!isNaN(value) && value > 0) {
-                    totalValue += value;
+            // Skip empty lines
+            if (!line) continue;
+            
+            // Look for lines that are account names (followed by account number pattern)
+            const accountMatch = line.match(/^([^,]+?)\s+\.{3}(\d+)/);
+            if (accountMatch) {
+                currentAccount = accountMatch[1].trim();
+                accountTotals.set(currentAccount, 0);
+                continue;
+            }
+            
+            // Check for "Account Total" lines that have the total value
+            if (line.includes('Account Total') && currentAccount) {
+                const cells = this.parseCSVLine(line);
+                // Find the market value - typically around index 6-7 in Schwab format
+                for (let j = 0; j < cells.length; j++) {
+                    const cell = cells[j]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
+                    // Look for the total dollar amount (should be after several "--" entries)
+                    if (cell && cell.match(/^\d+\.\d{2}$/) && parseFloat(cell) > 100) {
+                        const total = parseFloat(cell);
+                        if (!isNaN(total) && total > 0) {
+                            accountTotals.set(currentAccount, total);
+                            break;
+                        }
+                    }
                 }
+                continue;
             }
         }
 
-        if (totalValue > 0) {
-            const account = {
-                id: Date.now(),
-                name: accountName,
-                type: 'brokerage',
-                balance: totalValue,
-                source: 'schwab_csv'
-            };
-            this.accounts.push(account);
-            importedCount = 1;
-        }
+        // Create accounts from totals
+        accountTotals.forEach((balance, accountName) => {
+            if (balance > 0) {
+                const account = {
+                    id: Date.now() + importedCount,
+                    name: `Schwab - ${accountName}`,
+                    type: this.inferAccountType(accountName),
+                    balance: balance,
+                    source: 'schwab_csv'
+                };
+                this.accounts.push(account);
+                importedCount++;
+            }
+        });
 
         return importedCount;
     }
 
     parseFidelityCSV(lines, headers) {
-        const accountIdx = headers.findIndex(h => h.includes('account name'));
+        const accountNumIdx = headers.findIndex(h => h.includes('account number'));
+        const accountNameIdx = headers.findIndex(h => h.includes('account name'));
+        const descriptionIdx = headers.findIndex(h => h.includes('description'));
         const valueIdx = headers.findIndex(h => h.includes('current value'));
         
         let importedCount = 0;
-        const accountName = `Fidelity Import ${new Date().toLocaleDateString()}`;
+        const accountTotals = new Map();
+        const brokerageLinkAccounts = new Set();
 
-        // Aggregate total value
-        let totalValue = 0;
-
+        // First pass: identify BROKERAGELINK placeholder rows
         for (let i = 1; i < lines.length; i++) {
             const cells = this.parseCSVLine(lines[i]);
             
-            if (cells.length > valueIdx) {
-                const valueStr = cells[valueIdx]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
-                const value = parseFloat(valueStr);
-
-                if (!isNaN(value) && value > 0) {
-                    totalValue += value;
+            if (cells.length > Math.max(accountNumIdx, descriptionIdx)) {
+                const description = cells[descriptionIdx]?.replace(/"/g, '').trim().toUpperCase();
+                const accountNum = cells[accountNumIdx]?.replace(/"/g, '').trim();
+                
+                if (description === 'BROKERAGELINK' && accountNum) {
+                    brokerageLinkAccounts.add(accountNum);
                 }
             }
         }
 
-        if (totalValue > 0) {
-            const account = {
-                id: Date.now(),
-                name: accountName,
-                type: 'brokerage',
-                balance: totalValue,
-                source: 'fidelity_csv'
-            };
-            this.accounts.push(account);
-            importedCount = 1;
+        // Second pass: aggregate values, skipping BROKERAGELINK placeholder rows
+        for (let i = 1; i < lines.length; i++) {
+            const cells = this.parseCSVLine(lines[i]);
+            
+            if (cells.length > Math.max(accountNumIdx, accountNameIdx, valueIdx)) {
+                const accountNum = cells[accountNumIdx]?.replace(/"/g, '').trim();
+                const accountName = cells[accountNameIdx]?.replace(/"/g, '').trim();
+                const description = cells[descriptionIdx]?.replace(/"/g, '').trim().toUpperCase();
+                const valueStr = cells[valueIdx]?.replace(/"/g, '').replace(/[$,]/g, '').trim();
+                const value = parseFloat(valueStr);
+
+                // Skip BROKERAGELINK placeholder rows (they're summaries of other accounts)
+                if (description === 'BROKERAGELINK') {
+                    continue;
+                }
+
+                // Skip empty rows
+                if (!accountNum || !accountName) {
+                    continue;
+                }
+
+                if (!isNaN(value) && value > 0) {
+                    const key = `${accountNum}|${accountName}`;
+                    accountTotals.set(key, (accountTotals.get(key) || 0) + value);
+                }
+            }
         }
 
+        // Create accounts from aggregated totals
+        accountTotals.forEach((balance, key) => {
+            const [accountNum, accountName] = key.split('|');
+            if (balance > 0) {
+                const account = {
+                    id: Date.now() + importedCount,
+                    name: `Fidelity - ${accountName}`,
+                    type: this.inferAccountType(accountName),
+                    balance: balance,
+                    source: 'fidelity_csv'
+                };
+                this.accounts.push(account);
+                importedCount++;
+            }
+        });
+
         return importedCount;
+    }
+
+    inferAccountType(accountName) {
+        const name = accountName.toLowerCase();
+        if (name.includes('401k') || name.includes('401(k)')) return '401k';
+        if (name.includes('roth')) return 'roth';
+        if (name.includes('ira') && !name.includes('roth')) return 'ira';
+        if (name.includes('hsa') || name.includes('health')) return 'other';
+        if (name.includes('brokerage')) return 'brokerage';
+        return 'brokerage';
     }
 
     parseCSVLine(line) {
@@ -366,6 +517,9 @@ class FITracker {
 
         // Update chart
         this.updateAllocationChart();
+
+        // Update Projections
+        this.updateProjections(totalNetWorth);
     }
 
     calculateTotalNetWorth() {
@@ -598,6 +752,137 @@ class FITracker {
     clearBitcoinForm() {
         document.getElementById('btcAmount').value = '';
         document.getElementById('btcPrice').value = '';
+    }
+
+    // ===== Projections & Simulations =====
+    updateProjections(currentNetWorth) {
+        this.updateFIMetrics(currentNetWorth);
+        this.updateProjectionChart(currentNetWorth);
+    }
+
+    updateFIMetrics(currentNetWorth) {
+        // Coast FI Calculation
+        // Future Value = PV * (1 + r)^n
+        const yearsToRetirement = Math.max(0, this.retirementAge - this.currentAge);
+        const coastAmount = currentNetWorth * Math.pow(1 + (this.annualReturn / 100), yearsToRetirement);
+        
+        const coastAgeEl = document.getElementById('coastTargetAge');
+        if (coastAgeEl) coastAgeEl.textContent = this.retirementAge;
+        
+        const coastAmountEl = document.getElementById('coastFiAmount');
+        if (coastAmountEl) coastAmountEl.textContent = this.formatCurrency(coastAmount);
+
+        // FI Days Calculation
+        // (Net Worth / FI Target) * 365
+        const fiDays = this.fiTarget > 0 ? (currentNetWorth / this.fiTarget) * 365 : 0;
+        const fiDaysEl = document.getElementById('fiDays');
+        if (fiDaysEl) fiDaysEl.textContent = Math.floor(fiDays);
+    }
+
+    updateProjectionChart(currentNetWorth) {
+        const ctx = document.getElementById('projectionChart');
+        if (!ctx) return;
+
+        // Calculate projection data
+        const labels = [];
+        const data = [];
+        const targetLine = [];
+        
+        let balance = currentNetWorth;
+        let year = new Date().getFullYear();
+        let fiYear = null;
+
+        // Project for next 30 years
+        const maxYears = 30; 
+        
+        for (let i = 0; i <= maxYears; i++) {
+            labels.push(year + i);
+            data.push(balance);
+            targetLine.push(this.fiTarget);
+
+            if (balance >= this.fiTarget && !fiYear) {
+                fiYear = year + i;
+            }
+
+            // Compound interest + Contribution
+            balance = balance * (1 + this.annualReturn / 100) + (this.monthlyContribution * 12);
+        }
+
+        // Update FI Date Display
+        const dateEl = document.getElementById('projectedFiDate');
+        if (dateEl) {
+            if (fiYear) {
+                const yearsAway = fiYear - year;
+                dateEl.textContent = `${fiYear} (in ${yearsAway} years)`;
+            } else {
+                dateEl.textContent = `> ${year + maxYears}`;
+            }
+        }
+
+        // Render Chart
+        if (this.projectionChart) {
+            this.projectionChart.destroy();
+        }
+
+        this.projectionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Projected Net Worth',
+                        data: data,
+                        borderColor: '#2ecc71',
+                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'FI Target',
+                        data: targetLine,
+                        borderColor: '#e74c3c',
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: function(value) {
+                                if (value >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M';
+                                if (value >= 1000) return '$' + (value / 1000).toFixed(0) + 'k';
+                                return '$' + value;
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 }
 

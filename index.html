@@ -19,12 +19,16 @@
             <h2>Financial Independence Goal</h2>
             <div class="config-grid">
                 <div class="input-group">
-                    <label for="fiTarget">Target Amount ($)</label>
-                    <input type="number" id="fiTarget" placeholder="1000000" min="0" step="1000">
+                    <label for="annualExpenses">Annual Expenses ($)</label>
+                    <input type="number" id="annualExpenses" placeholder="40000" min="0" step="1000">
                 </div>
                 <div class="input-group">
                     <label for="withdrawalRate">Withdrawal Rate (%)</label>
                     <input type="number" id="withdrawalRate" placeholder="4" min="0" max="10" step="0.1" value="4">
+                </div>
+                <div class="input-group">
+                    <label for="fiTarget">Target Amount ($)</label>
+                    <input type="number" id="fiTarget" placeholder="1000000" min="0" step="1000">
                 </div>
                 <button id="saveConfig" class="btn btn-primary">Save Goal</button>
             </div>
@@ -57,6 +61,59 @@
             
             <div class="chart-container">
                 <canvas id="allocationChart"></canvas>
+            </div>
+        </section>
+
+            <div class="chart-container">
+                <canvas id="allocationChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Freedom Metrics -->
+        <section class="freedom card">
+            <h2>Freedom Milestones</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Coast FI @ Age <span id="coastTargetAge">65</span></div>
+                    <div class="stat-value" id="coastFiAmount">$0</div>
+                    <div class="stat-subtext">If you stop saving today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">FI Days Funded</div>
+                    <div class="stat-value" id="fiDays">0</div>
+                    <div class="stat-subtext">Days of freedom per year</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Projected FI Date</div>
+                    <div class="stat-value" id="projectedFiDate">-</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Future Projections -->
+        <section class="projections card">
+            <h2>Future Projections</h2>
+            <div class="config-grid">
+                <div class="input-group">
+                    <label for="monthlyContribution">Monthly Contribution ($)</label>
+                    <input type="number" id="monthlyContribution" placeholder="2000" min="0" step="100">
+                </div>
+                <div class="input-group">
+                    <label for="annualReturn">Expected Return (%)</label>
+                    <input type="number" id="annualReturn" placeholder="7" min="0" max="20" step="0.1" value="7">
+                </div>
+                <div class="input-group">
+                    <label for="currentAge">Current Age</label>
+                    <input type="number" id="currentAge" placeholder="30" min="0" max="100" step="1" value="30">
+                </div>
+                <div class="input-group">
+                    <label for="retirementAge">Retirement Age</label>
+                    <input type="number" id="retirementAge" placeholder="65" min="0" max="100" step="1" value="65">
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="projectionChart"></canvas>
             </div>
         </section>
 

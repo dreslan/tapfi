@@ -654,7 +654,8 @@ class FITracker {
     // ===== Account Management =====
     deleteAccount(id) {
         if (confirm('Are you sure you want to delete this account?')) {
-            this.accounts = this.accounts.filter(acc => acc.id !== id);
+            // Handle both string and number IDs
+            this.accounts = this.accounts.filter(acc => String(acc.id) !== String(id));
             this.saveData();
             this.updateDashboard();
             this.showNotification('Account deleted successfully');

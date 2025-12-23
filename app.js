@@ -160,6 +160,14 @@ class FITracker {
             }
         });
 
+        // Collapsible Cards
+        document.querySelectorAll('.card.collapsible .card-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const card = header.parentElement;
+                card.classList.toggle('collapsed');
+            });
+        });
+
         // Manual Account
         document.getElementById('addManualAccount').addEventListener('click', () => this.addManualAccount());
 

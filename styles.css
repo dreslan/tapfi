@@ -87,6 +87,42 @@ header h1 {
     font-size: 1.1rem;
 }
 
+/* ===== Collapsible Cards ===== */
+.card.collapsible .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    user-select: none;
+}
+
+.card.collapsible h2 {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.toggle-icon {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+}
+
+.card.collapsible.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.card.collapsible.collapsed .card-content {
+    display: none;
+}
+
+.card.collapsible.collapsed {
+    padding-bottom: 15px;
+}
+
 /* ===== FI Configuration ===== */
 .config-grid {
     display: grid;

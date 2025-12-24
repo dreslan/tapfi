@@ -262,6 +262,17 @@ class FITracker {
         if (viewByHoldingsBtn) {
             viewByHoldingsBtn.addEventListener('click', () => this.switchView('holdings'));
         }
+
+        // Event delegation for edit withdrawal age buttons
+        const accountsTable = document.getElementById('accountsTableBody');
+        if (accountsTable) {
+            accountsTable.addEventListener('click', (e) => {
+                if (e.target.classList.contains('edit-withdrawal-age')) {
+                    const accountId = e.target.dataset.accountId;
+                    this.editWithdrawalAge(accountId);
+                }
+            });
+        }
     }
 
     // ===== FI Configuration =====
@@ -761,6 +772,91 @@ class FITracker {
         }
     }
 
+    editWithdrawalAge(id) {
+        // Find the account
+        const account = this.accounts.find(acc => String(acc.id) === String(id));
+        if (!account) return;
+
+        const currentAge = account.withdrawalAge !== undefined ? account.withdrawalAge : this.getDefaultWithdrawalAge(account.type);
+        const displayElement = document.getElementById(`withdrawal-age-display-${id}`);
+        
+        if (!displayElement) return;
+
+        // Create input field
+        const currentDisplay = currentAge === 0 ? '' : currentAge.toString();
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = currentDisplay;
+        input.placeholder = currentAge === 0 ? 'Now' : 'Age';
+        input.min = '0';
+        input.max = '100';
+        input.step = '0.5';
+        input.style.width = '80px';
+        input.style.padding = '4px';
+        input.style.marginRight = '8px';
+
+        // Create save button
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.className = 'btn btn-primary btn-sm';
+        saveBtn.style.marginRight = '4px';
+
+        // Create cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'btn btn-secondary btn-sm';
+
+        // Replace display with input
+        const parent = displayElement.parentElement;
+        const originalContent = parent.innerHTML;
+        parent.innerHTML = '';
+        parent.appendChild(input);
+        parent.appendChild(saveBtn);
+        parent.appendChild(cancelBtn);
+        input.focus();
+
+        // Save handler
+        const saveHandler = () => {
+            const newValue = input.value.trim();
+            let withdrawalAge;
+            
+            if (newValue === '') {
+                withdrawalAge = 0; // Empty means "Now" (immediately accessible)
+            } else {
+                withdrawalAge = parseFloat(newValue);
+                if (isNaN(withdrawalAge) || withdrawalAge < 0 || withdrawalAge > 100) {
+                    alert('Please enter a valid age between 0 and 100');
+                    input.focus();
+                    return;
+                }
+            }
+
+            // Update account
+            account.withdrawalAge = withdrawalAge;
+            account.lastUpdated = new Date().toISOString();
+            this.saveData();
+            this.updateDashboard();
+            this.showNotification('Withdrawal age updated successfully');
+        };
+
+        // Cancel handler
+        const cancelHandler = () => {
+            parent.innerHTML = originalContent;
+        };
+
+        saveBtn.addEventListener('click', saveHandler);
+        cancelBtn.addEventListener('click', cancelHandler);
+        
+        // Allow Enter to save, Escape to cancel
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                saveHandler();
+            } else if (e.key === 'Escape') {
+                cancelHandler();
+            }
+        });
+    }
+
     // ===== Dashboard Updates =====
     updateDashboard() {
         const totalNetWorth = this.calculateTotalNetWorth();
@@ -948,7 +1044,10 @@ class FITracker {
                         </td>
                         <td><span class="account-type-badge ${account.type}">${this.formatAccountType(account.type)}</span></td>
                         <td>${this.formatCurrency(account.balance)}</td>
-                        <td>${withdrawalAgeDisplay}</td>
+                        <td>
+                            <span id="withdrawal-age-display-${account.id}">${withdrawalAgeDisplay}</span>
+                            <button class="btn btn-secondary btn-sm edit-withdrawal-age" style="margin-left: 8px;" data-account-id="${account.id}">Edit</button>
+                        </td>
                         <td>${percentage}%</td>
                         <td>
                             <button class="btn btn-danger btn-sm" onclick="tracker.deleteAccount('${account.id}')">Delete</button>
@@ -1812,8 +1911,5 @@ class FITracker {
     }
 }
 
-// Initialize app
-let tracker;
-document.addEventListener('DOMContentLoaded', () => {
-    tracker = new FITracker();
-});
+// Initialize app immediately since script loads at end of body
+window.tracker = new FITracker();

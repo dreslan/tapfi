@@ -113,8 +113,39 @@
                     </div>
                 </div>
                 
-                <div class="chart-container">
-                    <canvas id="allocationChart"></canvas>
+                <!-- View Toggle -->
+                <div style="display: flex; justify-content: center; margin: 2rem 0 1rem 0; gap: 10px;">
+                    <button id="viewByAccounts" class="btn btn-secondary btn-sm view-toggle active">By Accounts</button>
+                    <button id="viewByHoldings" class="btn btn-secondary btn-sm view-toggle">By Holdings</button>
+                </div>
+
+                <!-- Accounts View -->
+                <div id="accountsView" class="allocation-view">
+                    <div class="chart-container">
+                        <canvas id="allocationChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Holdings View -->
+                <div id="holdingsView" class="allocation-view" style="display: none;">
+                    <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Holdings</div>
+                            <div class="stat-value" id="totalHoldingsCount">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Top Holding</div>
+                            <div class="stat-value" id="topHolding" style="font-size: 1.2rem;">-</div>
+                            <div class="stat-subtext" id="topHoldingValue">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Asset Classes</div>
+                            <div class="stat-value" id="assetClassCount">0</div>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="holdingsAllocationChart"></canvas>
+                    </div>
                 </div>
                 <div class="chart-container" style="margin-top: 2rem; height: 300px; position: relative;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">

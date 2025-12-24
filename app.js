@@ -21,6 +21,7 @@ class FITracker {
         this.chart = null;
         this.projectionChart = null;
         this.historyChart = null;
+        this.holdingsChart = null;
         
         this.loadData();
         this.initializeEventListeners();
@@ -244,6 +245,18 @@ class FITracker {
         
         if (collapseAllBtn) {
             collapseAllBtn.addEventListener('click', () => this.collapseAllCards());
+        }
+
+        // View Toggle (Accounts vs Holdings)
+        const viewByAccountsBtn = document.getElementById('viewByAccounts');
+        const viewByHoldingsBtn = document.getElementById('viewByHoldings');
+        
+        if (viewByAccountsBtn) {
+            viewByAccountsBtn.addEventListener('click', () => this.switchView('accounts'));
+        }
+        
+        if (viewByHoldingsBtn) {
+            viewByHoldingsBtn.addEventListener('click', () => this.switchView('holdings'));
         }
     }
 
@@ -817,42 +830,10 @@ class FITracker {
         const tbody = document.getElementById('holdingsList');
         if (!tbody) return;
 
-        // Aggregate holdings
-        const holdingsMap = new Map();
-
-        this.accounts.forEach(acc => {
-            if (acc.holdings && Array.isArray(acc.holdings) && acc.holdings.length > 0) {
-                acc.holdings.forEach(h => {
-                    const key = h.symbol || h.description; // Fallback if symbol is missing
-                    if (!holdingsMap.has(key)) {
-                        holdingsMap.set(key, {
-                            symbol: h.symbol,
-                            description: h.description,
-                            assetClass: h.assetClass || 'Unknown',
-                            value: 0
-                        });
-                    }
-                    holdingsMap.get(key).value += h.value;
-                });
-            } else if (acc.balance > 0) {
-                // Handle accounts without detailed holdings (e.g. manual entry)
-                const key = acc.name;
-                if (!holdingsMap.has(key)) {
-                    holdingsMap.set(key, {
-                        symbol: '',
-                        description: acc.name,
-                        assetClass: this.inferAssetClassFromType(acc.type),
-                        value: 0
-                    });
-                }
-                holdingsMap.get(key).value += acc.balance;
-            }
-        });
-
+        const holdings = this.aggregateHoldings();
         const totalNetWorth = this.calculateTotalNetWorth();
-        const sortedHoldings = Array.from(holdingsMap.values()).sort((a, b) => b.value - a.value);
 
-        tbody.innerHTML = sortedHoldings.map(h => {
+        tbody.innerHTML = holdings.map(h => {
             const percentage = totalNetWorth > 0 ? (h.value / totalNetWorth * 100).toFixed(2) : 0;
             return `
                 <tr>
@@ -1546,6 +1527,175 @@ class FITracker {
         cards.forEach(card => {
             card.classList.add('collapsed');
         });
+    }
+
+    // ===== View Switching (Accounts vs Holdings) =====
+    switchView(view) {
+        const accountsView = document.getElementById('accountsView');
+        const holdingsView = document.getElementById('holdingsView');
+        const accountsBtn = document.getElementById('viewByAccounts');
+        const holdingsBtn = document.getElementById('viewByHoldings');
+
+        if (view === 'accounts') {
+            accountsView.style.display = 'block';
+            holdingsView.style.display = 'none';
+            accountsBtn.classList.add('active');
+            holdingsBtn.classList.remove('active');
+        } else {
+            accountsView.style.display = 'none';
+            holdingsView.style.display = 'block';
+            accountsBtn.classList.remove('active');
+            holdingsBtn.classList.add('active');
+            this.updateHoldingsView();
+        }
+    }
+
+    aggregateHoldings() {
+        const holdingsMap = new Map();
+
+        this.accounts.forEach(acc => {
+            if (acc.holdings && Array.isArray(acc.holdings) && acc.holdings.length > 0) {
+                acc.holdings.forEach(h => {
+                    const key = h.symbol || h.description;
+                    if (!holdingsMap.has(key)) {
+                        holdingsMap.set(key, {
+                            symbol: h.symbol,
+                            description: h.description,
+                            assetClass: h.assetClass || 'Unknown',
+                            value: 0
+                        });
+                    }
+                    holdingsMap.get(key).value += h.value;
+                });
+            } else if (acc.balance > 0) {
+                const key = acc.name;
+                if (!holdingsMap.has(key)) {
+                    holdingsMap.set(key, {
+                        symbol: '',
+                        description: acc.name,
+                        assetClass: this.inferAssetClassFromType(acc.type),
+                        value: 0
+                    });
+                }
+                holdingsMap.get(key).value += acc.balance;
+            }
+        });
+
+        return Array.from(holdingsMap.values()).sort((a, b) => b.value - a.value);
+    }
+
+    updateHoldingsView() {
+        const holdings = this.aggregateHoldings();
+        const totalNetWorth = this.calculateTotalNetWorth();
+
+        // Update stats
+        const totalHoldings = holdings.length;
+        document.getElementById('totalHoldingsCount').textContent = totalHoldings;
+
+        if (holdings.length > 0) {
+            const topHolding = holdings[0];
+            const topSymbol = topHolding.symbol || topHolding.description;
+            const topValue = topHolding.value;
+            const topPercentage = totalNetWorth > 0 ? ((topValue / totalNetWorth) * 100).toFixed(1) : 0;
+            
+            document.getElementById('topHolding').textContent = topSymbol;
+            document.getElementById('topHoldingValue').textContent = `${this.formatCurrency(topValue)} (${topPercentage}%)`;
+        } else {
+            document.getElementById('topHolding').textContent = '-';
+            document.getElementById('topHoldingValue').textContent = '$0';
+        }
+
+        // Count unique asset classes
+        const assetClasses = new Set(holdings.map(h => h.assetClass));
+        document.getElementById('assetClassCount').textContent = assetClasses.size;
+
+        // Update holdings allocation chart
+        this.updateHoldingsAllocationChart(holdings);
+    }
+
+    updateHoldingsAllocationChart(holdings) {
+        const ctx = document.getElementById('holdingsAllocationChart');
+        
+        if (!ctx) return;
+
+        if (holdings.length === 0) {
+            if (this.holdingsChart) {
+                this.holdingsChart.destroy();
+                this.holdingsChart = null;
+            }
+            return;
+        }
+
+        // Limit to top 10 holdings for clarity, group the rest as "Others"
+        const maxDisplayed = 10;
+        let displayHoldings = holdings.slice(0, maxDisplayed);
+        
+        if (holdings.length > maxDisplayed) {
+            const othersValue = holdings.slice(maxDisplayed).reduce((sum, h) => sum + h.value, 0);
+            displayHoldings.push({
+                symbol: '__OTHERS__',
+                description: 'Others',
+                value: othersValue
+            });
+        }
+
+        const labels = displayHoldings.map(h => h.symbol || h.description);
+        const data = displayHoldings.map(h => h.value);
+        
+        // Generate colors dynamically to handle any number of holdings
+        const baseColors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', 
+            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
+            '#06b6d4', '#84cc16', '#a3a3a3'
+        ];
+        const colors = data.map((_, index) => baseColors[index % baseColors.length]);
+
+        if (this.holdingsChart) {
+            this.holdingsChart.data.labels = labels;
+            this.holdingsChart.data.datasets[0].data = data;
+            this.holdingsChart.data.datasets[0].backgroundColor = colors;
+            this.holdingsChart.update();
+        } else {
+            this.holdingsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#1f2937'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#e5e7eb',
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.label || '';
+                                    const value = this.formatCurrency(context.parsed);
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 

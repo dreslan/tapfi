@@ -1665,7 +1665,7 @@ class FITracker {
         if (holdings.length > maxDisplayed) {
             const othersValue = holdings.slice(maxDisplayed).reduce((sum, h) => sum + h.value, 0);
             displayHoldings.push({
-                symbol: 'OTHER',
+                symbol: '__OTHERS__',
                 description: 'Others',
                 value: othersValue
             });
@@ -1673,11 +1673,14 @@ class FITracker {
 
         const labels = displayHoldings.map(h => h.symbol || h.description);
         const data = displayHoldings.map(h => h.value);
-        const colors = [
+        
+        // Generate colors dynamically to handle any number of holdings
+        const baseColors = [
             '#3b82f6', '#10b981', '#f59e0b', '#ef4444', 
             '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
             '#06b6d4', '#84cc16', '#a3a3a3'
         ];
+        const colors = data.map((_, index) => baseColors[index % baseColors.length]);
 
         if (this.holdingsChart) {
             this.holdingsChart.data.labels = labels;

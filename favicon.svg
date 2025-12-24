@@ -2,26 +2,17 @@
   <!-- Background -->
   <rect width="64" height="64" fill="#1e293b" rx="8"/>
   
-  <!-- Beer Tap -->
-  <rect x="26" y="8" width="12" height="6" fill="#94a3b8" rx="2"/>
-  <rect x="24" y="14" width="16" height="4" fill="#cbd5e1" rx="2"/>
-  <path d="M 27 18 L 27 32 Q 27 35 30 35 L 34 35 Q 37 35 37 32 L 37 18 Z" fill="#e5e7eb"/>
+  <!-- Money Bag - emoji style with theme colors -->
+  <!-- Bag tie/top -->
+  <path d="M 28 16 Q 28 12 32 12 Q 36 12 36 16 L 36 20 L 28 20 Z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
   
-  <!-- Beer Mug -->
-  <path d="M 16 36 L 16 54 Q 16 56 18 56 L 46 56 Q 48 56 48 54 L 48 36 Z" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.5"/>
-  <rect x="16" y="34" width="32" height="4" fill="#fef3c7" rx="2"/>
-  <ellipse cx="32" cy="36" rx="14" ry="3" fill="#fff7ed" opacity="0.6"/>
+  <!-- Main bag body -->
+  <ellipse cx="32" cy="42" rx="18" ry="20" fill="#10b981" stroke="#059669" stroke-width="2"/>
+  <ellipse cx="32" cy="40" rx="18" ry="3" fill="#34d399" opacity="0.6"/>
   
-  <!-- Handle -->
-  <path d="M 48 40 Q 54 40 54 46 Q 54 52 48 52" fill="none" stroke="#f59e0b" stroke-width="3"/>
+  <!-- Dollar sign -->
+  <text x="32" y="48" font-family="Arial, sans-serif" font-size="22" fill="#fef3c7" text-anchor="middle" font-weight="bold">$</text>
   
-  <!-- Coins falling -->
-  <circle cx="32" cy="24" r="4" fill="#fbbf24" stroke="#f59e0b" stroke-width="1"/>
-  <circle cx="32" cy="24" r="2.5" fill="#fef3c7"/>
-  
-  <circle cx="24" cy="28" r="3.5" fill="#fbbf24" stroke="#f59e0b" stroke-width="1"/>
-  <circle cx="24" cy="28" r="2" fill="#fef3c7"/>
-  
-  <circle cx="40" cy="28" r="3.5" fill="#fbbf24" stroke="#f59e0b" stroke-width="1"/>
-  <circle cx="40" cy="28" r="2" fill="#fef3c7"/>
+  <!-- Shine/highlight -->
+  <ellipse cx="24" cy="35" rx="4" ry="6" fill="#34d399" opacity="0.4"/>
 </svg>

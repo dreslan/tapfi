@@ -154,7 +154,12 @@ class FITracker {
                         // For projectionYears, allow empty value (null)
                         if (id === 'projectionYears') {
                             const val = el.value.trim();
-                            this[id] = val === '' ? null : (parseFloat(val) || null);
+                            if (val === '') {
+                                this[id] = null;
+                            } else {
+                                const parsed = parseFloat(val);
+                                this[id] = isNaN(parsed) ? null : parsed;
+                            }
                         } else {
                             this[id] = parseFloat(el.value) || 0;
                         }
@@ -1317,7 +1322,7 @@ class FITracker {
 
         // Calculate maxYears based on retirement age or user-specified years
         let maxYears;
-        if (this.projectionYears !== null && this.projectionYears > 0) {
+        if (this.projectionYears !== null && !isNaN(this.projectionYears) && this.projectionYears > 0) {
             // User specified custom projection years
             maxYears = Math.floor(this.projectionYears);
         } else {

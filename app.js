@@ -830,42 +830,10 @@ class FITracker {
         const tbody = document.getElementById('holdingsList');
         if (!tbody) return;
 
-        // Aggregate holdings
-        const holdingsMap = new Map();
-
-        this.accounts.forEach(acc => {
-            if (acc.holdings && Array.isArray(acc.holdings) && acc.holdings.length > 0) {
-                acc.holdings.forEach(h => {
-                    const key = h.symbol || h.description; // Fallback if symbol is missing
-                    if (!holdingsMap.has(key)) {
-                        holdingsMap.set(key, {
-                            symbol: h.symbol,
-                            description: h.description,
-                            assetClass: h.assetClass || 'Unknown',
-                            value: 0
-                        });
-                    }
-                    holdingsMap.get(key).value += h.value;
-                });
-            } else if (acc.balance > 0) {
-                // Handle accounts without detailed holdings (e.g. manual entry)
-                const key = acc.name;
-                if (!holdingsMap.has(key)) {
-                    holdingsMap.set(key, {
-                        symbol: '',
-                        description: acc.name,
-                        assetClass: this.inferAssetClassFromType(acc.type),
-                        value: 0
-                    });
-                }
-                holdingsMap.get(key).value += acc.balance;
-            }
-        });
-
+        const holdings = this.aggregateHoldings();
         const totalNetWorth = this.calculateTotalNetWorth();
-        const sortedHoldings = Array.from(holdingsMap.values()).sort((a, b) => b.value - a.value);
 
-        tbody.innerHTML = sortedHoldings.map(h => {
+        tbody.innerHTML = holdings.map(h => {
             const percentage = totalNetWorth > 0 ? (h.value / totalNetWorth * 100).toFixed(2) : 0;
             return `
                 <tr>
@@ -1685,6 +1653,7 @@ class FITracker {
         if (this.holdingsChart) {
             this.holdingsChart.data.labels = labels;
             this.holdingsChart.data.datasets[0].data = data;
+            this.holdingsChart.data.datasets[0].backgroundColor = colors;
             this.holdingsChart.update();
         } else {
             this.holdingsChart = new Chart(ctx, {

@@ -682,6 +682,7 @@ class FITracker {
         document.getElementById('fiProgress').textContent = fiProgress.toFixed(1) + '%';
         document.getElementById('annualIncome').textContent = this.formatCurrency(annualIncome);
         document.getElementById('remainingAmount').textContent = this.formatCurrency(remaining);
+        document.getElementById('withdrawalRateDisplay').textContent = this.withdrawalRate;
 
         // Update progress bar
         const progressFill = document.getElementById('progressFill');

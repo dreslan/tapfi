@@ -13,6 +13,7 @@ class FITracker {
         this.annualReturn = 7;
         this.currentAge = 30;
         this.retirementAge = 65;
+        this.projectionYears = null; // null means auto-calculate
 
         this.history = []; // Historical Net Worth snapshots
 
@@ -42,6 +43,7 @@ class FITracker {
                 this.annualReturn = data.annualReturn !== undefined ? data.annualReturn : 7;
                 this.currentAge = data.currentAge !== undefined ? data.currentAge : 30;
                 this.retirementAge = data.retirementAge !== undefined ? data.retirementAge : 65;
+                this.projectionYears = data.projectionYears !== undefined ? data.projectionYears : null;
 
                 // Populate config inputs
                 document.getElementById('fiTarget').value = this.formatInputCurrency(this.fiTarget);
@@ -55,6 +57,9 @@ class FITracker {
                     document.getElementById('annualReturn').value = this.annualReturn;
                     document.getElementById('currentAge').value = this.currentAge;
                     document.getElementById('retirementAge').value = this.retirementAge;
+                    if (this.projectionYears !== null) {
+                        document.getElementById('projectionYears').value = this.projectionYears;
+                    }
                 }
             } catch (e) {
                 console.error('Error loading data:', e);
@@ -75,6 +80,7 @@ class FITracker {
             annualReturn: this.annualReturn,
             currentAge: this.currentAge,
             retirementAge: this.retirementAge,
+            projectionYears: this.projectionYears,
 
             lastUpdated: new Date().toISOString()
         };
@@ -137,7 +143,7 @@ class FITracker {
         });
 
         // Projections Inputs
-        ['monthlyContribution', 'annualReturn', 'currentAge', 'retirementAge'].forEach(id => {
+        ['monthlyContribution', 'annualReturn', 'currentAge', 'retirementAge', 'projectionYears'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('input', () => {
@@ -145,7 +151,18 @@ class FITracker {
                     if (el.dataset.type === 'currency') {
                         this[id] = this.parseInputCurrency(el.value);
                     } else {
-                        this[id] = parseFloat(el.value) || 0;
+                        // For projectionYears, allow empty value (null)
+                        if (id === 'projectionYears') {
+                            const val = el.value.trim();
+                            if (val === '') {
+                                this[id] = null;
+                            } else {
+                                const parsed = parseFloat(val);
+                                this[id] = isNaN(parsed) ? null : parsed;
+                            }
+                        } else {
+                            this[id] = parseFloat(el.value) || 0;
+                        }
                     }
                     this.saveData();
                     this.updateDashboard(); // Real-time updates
@@ -1303,8 +1320,19 @@ class FITracker {
         let year = new Date().getFullYear();
         let fiYear = null;
 
-        // Project for next 30 years
-        const maxYears = 30; 
+        // Calculate maxYears based on retirement age or user-specified years
+        let maxYears;
+        if (this.projectionYears !== null && !isNaN(this.projectionYears) && this.projectionYears > 0) {
+            // User specified custom projection years
+            maxYears = Math.floor(this.projectionYears);
+        } else {
+            // Auto-calculate: years until retirement + 5 year buffer
+            const yearsToRetirement = Math.max(0, this.retirementAge - this.currentAge);
+            maxYears = yearsToRetirement + 5; // Add 5 years post-retirement for visibility
+            
+            // Ensure minimum of 10 years and maximum of 50 years for reasonable display
+            maxYears = Math.max(10, Math.min(50, maxYears));
+        }
         
         for (let i = 0; i <= maxYears; i++) {
             labels.push(year + i);

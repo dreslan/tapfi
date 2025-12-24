@@ -1515,13 +1515,16 @@ class FITracker {
             }
         });
         
-        // Also add projected contributions (assume they go to accessible accounts like brokerage)
-        const contributionsValue = this.monthlyContribution * 12 * yearsFromNow;
-        if (contributionsValue > 0) {
-            // Assume contributions grow over time too
-            const avgYears = yearsFromNow / 2; // Average time in market
-            const contributionsGrown = contributionsValue * Math.pow(1 + this.annualReturn / 100, avgYears);
-            accessibleTotal += contributionsGrown;
+        // Add projected contributions (assume they go to accessible accounts like brokerage)
+        // Note: This assumes contributions go to immediately accessible accounts (e.g., brokerage)
+        // If users want different behavior, they can adjust their monthly contribution accordingly
+        if (yearsFromNow > 0 && this.monthlyContribution > 0) {
+            // Future value of annuity formula: FV = PMT * [((1 + r)^n - 1) / r]
+            // where PMT is monthly payment, r is monthly rate, n is number of months
+            const monthlyRate = this.annualReturn / 100 / 12;
+            const months = yearsFromNow * 12;
+            const contributionsFV = this.monthlyContribution * (Math.pow(1 + monthlyRate, months) - 1) / monthlyRate;
+            accessibleTotal += contributionsFV;
         }
         
         return accessibleTotal;

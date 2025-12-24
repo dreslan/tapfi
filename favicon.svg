@@ -1,0 +1,18 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#1e293b" rx="8"/>
+  
+  <!-- Money Bag - emoji style with theme colors -->
+  <!-- Bag tie/top -->
+  <path d="M 28 16 Q 28 12 32 12 Q 36 12 36 16 L 36 20 L 28 20 Z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1"/>
+  
+  <!-- Main bag body -->
+  <ellipse cx="32" cy="42" rx="18" ry="20" fill="#10b981" stroke="#059669" stroke-width="2"/>
+  <ellipse cx="32" cy="40" rx="18" ry="3" fill="#34d399" opacity="0.6"/>
+  
+  <!-- Dollar sign -->
+  <text x="32" y="48" font-family="Arial, sans-serif" font-size="22" fill="#fef3c7" text-anchor="middle" font-weight="bold">$</text>
+  
+  <!-- Shine/highlight -->
+  <ellipse cx="24" cy="35" rx="4" ry="6" fill="#34d399" opacity="0.4"/>
+</svg>

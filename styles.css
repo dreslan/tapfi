@@ -161,9 +161,14 @@ header h1 {
 /* ===== FI Configuration ===== */
 .config-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: repeat(2, 1fr);
     gap: 20px;
     align-items: end;
+}
+
+.config-grid .btn-primary {
+    grid-column: 1 / -1;
+    justify-self: start;
 }
 
 /* ===== Dashboard ===== */

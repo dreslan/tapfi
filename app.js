@@ -1809,7 +1809,7 @@ class FITracker {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.remove('collapsed');
-            this.saveCardState(card, false); // Skip individual saves
+            this.saveCardState(card, false); // Defer saveData() call
         });
         this.saveData(); // Single save after all cards updated
     }
@@ -1818,7 +1818,7 @@ class FITracker {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.add('collapsed');
-            this.saveCardState(card, false); // Skip individual saves
+            this.saveCardState(card, false); // Defer saveData() call
         });
         this.saveData(); // Single save after all cards updated
     }

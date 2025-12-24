@@ -64,6 +64,14 @@ header h1 {
     font-size: 1.1rem;
 }
 
+.card-controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 /* ===== Cards ===== */
 .card {
     background: var(--bg-card);
@@ -103,6 +111,33 @@ header h1 {
     border-bottom: none;
     margin-bottom: 0;
     padding-bottom: 0;
+}
+
+.drag-handle {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    cursor: grab;
+    margin-right: 15px;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+    user-select: none;
+}
+
+.drag-handle:hover {
+    opacity: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.card.drag-over {
+    border-top: 3px solid var(--primary-color);
 }
 
 .toggle-icon {

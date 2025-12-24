@@ -40,6 +40,11 @@
                         <label for="fiTarget">Target Amount ($)</label>
                         <input type="text" id="fiTarget" placeholder="1,000,000" data-type="currency">
                     </div>
+                    <div class="input-group">
+                        <label for="penaltyFreeAge">Penalty-Free Withdrawal Age</label>
+                        <input type="number" id="penaltyFreeAge" placeholder="59.5" min="0" max="100" step="0.5" value="59.5" title="Default age for retirement account accessibility (59.5 in US, may vary by country)">
+                        <small style="color: var(--text-muted); font-size: 0.75rem;">Age when retirement accounts (401k, IRA) are accessible penalty-free</small>
+                    </div>
                     <button id="saveConfig" class="btn btn-primary">Save Goal</button>
                 </div>
             </div>
@@ -57,6 +62,7 @@
                     <div class="input-group">
                         <label for="monthlyContribution">Monthly Contribution ($)</label>
                         <input type="text" id="monthlyContribution" placeholder="2,000" data-type="currency">
+                        <small style="color: var(--text-muted); font-size: 0.75rem;">Assumed to go to accessible accounts</small>
                     </div>
                     <div class="input-group">
                         <label for="annualReturn">Expected Return (%)</label>
@@ -241,8 +247,9 @@
                         <div class="stat-subtext">Days of freedom per year</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Projected FI Date</div>
+                        <div class="stat-label" title="When your accessible funds (brokerage, crypto, savings) reach your FI target">Projected FI Date ℹ️</div>
                         <div class="stat-value" id="projectedFiDate">-</div>
+                        <div class="stat-subtext" style="font-size: 0.7rem; margin-top: 0.25rem;">Based on accessible accounts only</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Financial Runway</div>
@@ -297,6 +304,11 @@
                                 <label for="accountBalance">Balance ($)</label>
                                 <input type="text" id="accountBalance" placeholder="0.00" data-type="currency">
                             </div>
+                            <div class="input-group">
+                                <label for="accountWithdrawalAge">Withdrawal Age</label>
+                                <input type="number" id="accountWithdrawalAge" placeholder="Auto" min="0" max="100" step="0.5" title="Age when you can access this account penalty-free (leave empty for auto-detect based on account type)">
+                                <small style="color: var(--text-muted); font-size: 0.75rem;">Leave empty for auto-detect (Brokerage/Crypto=Now, 401k/IRA=Penalty-free age)</small>
+                            </div>
                             <button id="addManualAccount" class="btn btn-primary">Add Account</button>
                         </div>
                     </div>
@@ -343,13 +355,14 @@
                                 <th>Account Name</th>
                                 <th>Type</th>
                                 <th>Balance</th>
+                                <th title="Age when account funds become accessible penalty-free">Withdrawal Age ℹ️</th>
                                 <th>% of Total</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="accountsTableBody">
                             <tr class="empty-state">
-                                <td colspan="5">No accounts added yet. Add your first account above!</td>
+                                <td colspan="6">No accounts added yet. Add your first account above!</td>
                             </tr>
                         </tbody>
                     </table>

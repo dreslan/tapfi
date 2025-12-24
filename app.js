@@ -7,6 +7,7 @@ class FITracker {
         this.fiTarget = 1000000;
         this.withdrawalRate = 4;
         this.annualExpenses = 40000;
+        this.penaltyFreeAge = 59.5; // Age for penalty-free retirement account withdrawals
         
         // Projections defaults
         this.monthlyContribution = 2000;
@@ -40,6 +41,7 @@ class FITracker {
                 this.fiTarget = data.fiTarget || 1000000;
                 this.withdrawalRate = data.withdrawalRate || 4;
                 this.annualExpenses = data.annualExpenses || 40000;
+                this.penaltyFreeAge = data.penaltyFreeAge !== undefined ? data.penaltyFreeAge : 59.5;
                 this.history = data.history || [];
                 this.cardOrder = data.cardOrder || [];
                 
@@ -54,6 +56,7 @@ class FITracker {
                 document.getElementById('fiTarget').value = this.formatInputCurrency(this.fiTarget);
                 document.getElementById('withdrawalRate').value = this.withdrawalRate;
                 document.getElementById('annualExpenses').value = this.formatInputCurrency(this.annualExpenses);
+                document.getElementById('penaltyFreeAge').value = this.penaltyFreeAge;
                 
                 // Populate projection inputs
                 const mcInput = document.getElementById('monthlyContribution');
@@ -78,6 +81,7 @@ class FITracker {
             fiTarget: this.fiTarget,
             withdrawalRate: this.withdrawalRate,
             annualExpenses: this.annualExpenses,
+            penaltyFreeAge: this.penaltyFreeAge,
             history: this.history,
             cardOrder: this.cardOrder,
             
@@ -258,6 +262,21 @@ class FITracker {
         if (viewByHoldingsBtn) {
             viewByHoldingsBtn.addEventListener('click', () => this.switchView('holdings'));
         }
+
+        // Event delegation for edit withdrawal age buttons
+        const accountsTable = document.getElementById('accountsTableBody');
+        if (accountsTable) {
+            accountsTable.addEventListener('click', (e) => {
+                if (e.target.classList.contains('edit-withdrawal-age')) {
+                    const accountId = e.target.dataset.accountId;
+                    this.editWithdrawalAge(accountId);
+                } else if (e.target.classList.contains('reset-withdrawal-age')) {
+                    const accountId = e.target.dataset.accountId;
+                    const defaultAge = parseFloat(e.target.dataset.defaultAge);
+                    this.resetWithdrawalAge(accountId, defaultAge);
+                }
+            });
+        }
     }
 
     // ===== FI Configuration =====
@@ -265,6 +284,7 @@ class FITracker {
         const target = this.parseInputCurrency(document.getElementById('fiTarget').value);
         const rate = parseFloat(document.getElementById('withdrawalRate').value);
         const expenses = this.parseInputCurrency(document.getElementById('annualExpenses').value);
+        const penaltyFreeAge = parseFloat(document.getElementById('penaltyFreeAge').value);
 
         if (isNaN(target) || target <= 0) {
             alert('Please enter a valid target amount');
@@ -276,9 +296,15 @@ class FITracker {
             return;
         }
 
+        if (isNaN(penaltyFreeAge) || penaltyFreeAge < 0 || penaltyFreeAge > 100) {
+            alert('Please enter a valid penalty-free withdrawal age (0-100)');
+            return;
+        }
+
         this.fiTarget = target;
         this.withdrawalRate = rate;
         this.annualExpenses = expenses || (target * (rate / 100));
+        this.penaltyFreeAge = penaltyFreeAge;
         
         this.saveData();
         this.updateDashboard();
@@ -290,6 +316,19 @@ class FITracker {
         const name = document.getElementById('accountName').value.trim();
         const type = document.getElementById('accountType').value;
         const balance = this.parseInputCurrency(document.getElementById('accountBalance').value);
+        const withdrawalAgeInput = document.getElementById('accountWithdrawalAge').value.trim();
+        
+        let withdrawalAge;
+        if (withdrawalAgeInput === '') {
+            // Auto-detect based on account type
+            withdrawalAge = this.getDefaultWithdrawalAge(type);
+        } else {
+            withdrawalAge = parseFloat(withdrawalAgeInput);
+            if (isNaN(withdrawalAge) || withdrawalAge < 0 || withdrawalAge > 100) {
+                alert('Please enter a valid withdrawal age (0-100)');
+                return;
+            }
+        }
 
         if (!name) {
             alert('Please enter an account name');
@@ -308,6 +347,7 @@ class FITracker {
             name: name,
             type: type,
             balance: balance,
+            withdrawalAge: withdrawalAge,
             source: 'manual',
             lastUpdated: new Date().toISOString(),
             holdings: [{
@@ -348,6 +388,7 @@ class FITracker {
             name: `Bitcoin (${amount.toFixed(8)} BTC)`,
             type: 'crypto',
             balance: balance,
+            withdrawalAge: 0, // Crypto is immediately accessible
             source: 'bitcoin',
             btcAmount: amount,
             btcPrice: price,
@@ -495,6 +536,7 @@ class FITracker {
                     name: accountName,
                     type: this.inferAccountType(currentAccountName || ''),
                     balance: totalBalance,
+                    withdrawalAge: this.getDefaultWithdrawalAge(this.inferAccountType(currentAccountName || '')),
                     source: 'schwab_csv',
                     holdings: currentHoldings,
                     lastUpdated: new Date().toISOString()
@@ -654,6 +696,7 @@ class FITracker {
                     name: accountName,
                     type: this.inferAccountType(data.name),
                     balance: totalBalance,
+                    withdrawalAge: this.getDefaultWithdrawalAge(this.inferAccountType(data.name)),
                     source: 'fidelity_csv',
                     holdings: data.holdings,
                     lastUpdated: new Date().toISOString()
@@ -681,6 +724,22 @@ class FITracker {
         if (name.includes('hsa') || name.includes('health')) return 'other';
         if (name.includes('brokerage')) return 'brokerage';
         return 'brokerage';
+    }
+
+    getDefaultWithdrawalAge(accountType) {
+        // Return the age at which this account type can be accessed penalty-free
+        switch(accountType) {
+            case '401k':
+            case 'ira':
+            case 'roth':
+                return this.penaltyFreeAge; // Use configured penalty-free age
+            case 'brokerage':
+            case 'savings':
+            case 'crypto':
+            case 'other':
+            default:
+                return 0; // Immediately accessible
+        }
     }
 
     parseCSVLine(line) {
@@ -714,6 +773,106 @@ class FITracker {
             this.saveData();
             this.updateDashboard();
             this.showNotification('Account deleted successfully');
+        }
+    }
+
+    editWithdrawalAge(id) {
+        // Find the account
+        const account = this.accounts.find(acc => String(acc.id) === String(id));
+        if (!account) return;
+
+        const currentAge = account.withdrawalAge !== undefined ? account.withdrawalAge : this.getDefaultWithdrawalAge(account.type);
+        const displayElement = document.getElementById(`withdrawal-age-display-${id}`);
+        
+        if (!displayElement) return;
+
+        // Create input field with better placeholder
+        const currentDisplay = currentAge <= this.currentAge ? '' : currentAge.toString();
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = currentDisplay;
+        input.placeholder = currentAge <= this.currentAge ? 'Now (or enter age)' : 'Age';
+        input.min = '0';
+        input.max = '100';
+        input.step = '0.5';
+        input.style.width = '120px';
+        input.style.padding = '4px';
+        input.style.marginRight = '8px';
+        input.title = `Enter age when accessible (leave empty or enter ${this.currentAge} or less for "Now")`;
+
+        // Create save button
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.className = 'btn btn-primary btn-sm';
+        saveBtn.style.marginRight = '4px';
+
+        // Create cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'btn btn-secondary btn-sm';
+
+        // Replace display with input
+        const parent = displayElement.parentElement;
+        const originalContent = parent.innerHTML;
+        parent.innerHTML = '';
+        parent.appendChild(input);
+        parent.appendChild(saveBtn);
+        parent.appendChild(cancelBtn);
+        input.focus();
+
+        // Save handler
+        const saveHandler = () => {
+            const newValue = input.value.trim();
+            let withdrawalAge;
+            
+            if (newValue === '') {
+                // Empty means current age or less (immediately accessible)
+                withdrawalAge = Math.min(0, this.currentAge);
+            } else {
+                withdrawalAge = parseFloat(newValue);
+                if (isNaN(withdrawalAge) || withdrawalAge < 0 || withdrawalAge > 100) {
+                    alert('Please enter a valid age between 0 and 100');
+                    input.focus();
+                    return;
+                }
+            }
+
+            // Update account
+            account.withdrawalAge = withdrawalAge;
+            account.lastUpdated = new Date().toISOString();
+            this.saveData();
+            this.updateDashboard();
+            this.showNotification('Withdrawal age updated successfully');
+        };
+
+        // Cancel handler
+        const cancelHandler = () => {
+            parent.innerHTML = originalContent;
+        };
+
+        saveBtn.addEventListener('click', saveHandler);
+        cancelBtn.addEventListener('click', cancelHandler);
+        
+        // Allow Enter to save, Escape to cancel
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                saveHandler();
+            } else if (e.key === 'Escape') {
+                cancelHandler();
+            }
+        });
+    }
+
+    resetWithdrawalAge(id, defaultAge) {
+        const account = this.accounts.find(acc => String(acc.id) === String(id));
+        if (!account) return;
+
+        if (confirm(`Reset withdrawal age to default (${defaultAge <= this.currentAge ? 'Now' : defaultAge})?`)) {
+            account.withdrawalAge = defaultAge;
+            account.lastUpdated = new Date().toISOString();
+            this.saveData();
+            this.updateDashboard();
+            this.showNotification('Withdrawal age reset to default');
         }
     }
 
@@ -862,7 +1021,7 @@ class FITracker {
         const totalNetWorth = this.calculateTotalNetWorth();
 
         if (this.accounts.length === 0) {
-            tbody.innerHTML = '<tr class="empty-state"><td colspan="5">No accounts added yet. Add your first account above!</td></tr>';
+            tbody.innerHTML = '<tr class="empty-state"><td colspan="6">No accounts added yet. Add your first account above!</td></tr>';
             return;
         }
 
@@ -883,7 +1042,7 @@ class FITracker {
             // Group Header
             html += `
                 <tr class="group-header">
-                    <td colspan="5" style="background-color: rgba(255,255,255,0.05); font-weight: bold; padding-top: 1rem;">
+                    <td colspan="6" style="background-color: rgba(255,255,255,0.05); font-weight: bold; padding-top: 1rem;">
                         ${groupName} <span style="font-weight: normal; opacity: 0.7">(${this.formatCurrency(groupTotal)})</span>
                     </td>
                 </tr>
@@ -893,6 +1052,10 @@ class FITracker {
             groupAccounts.forEach(account => {
                 const percentage = totalNetWorth > 0 ? (account.balance / totalNetWorth * 100).toFixed(1) : 0;
                 const lastUpdated = account.lastUpdated ? new Date(account.lastUpdated).toLocaleDateString() : 'N/A';
+                const withdrawalAge = account.withdrawalAge !== undefined ? account.withdrawalAge : this.getDefaultWithdrawalAge(account.type);
+                // Show "Now" if withdrawal age is <= current age (immediately accessible)
+                const withdrawalAgeDisplay = (withdrawalAge <= this.currentAge) ? 'Now' : withdrawalAge;
+                const defaultAge = this.getDefaultWithdrawalAge(account.type);
                 
                 html += `
                     <tr>
@@ -902,6 +1065,11 @@ class FITracker {
                         </td>
                         <td><span class="account-type-badge ${account.type}">${this.formatAccountType(account.type)}</span></td>
                         <td>${this.formatCurrency(account.balance)}</td>
+                        <td>
+                            <span id="withdrawal-age-display-${account.id}" title="Age when you can access this account penalty-free">${withdrawalAgeDisplay}</span>
+                            <button class="btn btn-secondary btn-sm edit-withdrawal-age" style="margin-left: 8px;" data-account-id="${account.id}" title="Edit withdrawal age">Edit</button>
+                            <button class="btn btn-secondary btn-sm reset-withdrawal-age" style="margin-left: 4px;" data-account-id="${account.id}" data-default-age="${defaultAge}" title="Reset to default (${defaultAge <= this.currentAge ? 'Now' : defaultAge})">Reset</button>
+                        </td>
                         <td>${percentage}%</td>
                         <td>
                             <button class="btn btn-danger btn-sm" onclick="tracker.deleteAccount('${account.id}')">Delete</button>
@@ -1174,6 +1342,7 @@ class FITracker {
         document.getElementById('accountName').value = '';
         document.getElementById('accountType').value = 'brokerage';
         document.getElementById('accountBalance').value = '';
+        document.getElementById('accountWithdrawalAge').value = '';
     }
 
     clearBitcoinForm() {
@@ -1311,12 +1480,14 @@ class FITracker {
 
         // Calculate projection data
         const labels = [];
-        const data = [];
+        const totalData = [];
+        const accessibleData = [];
         const targetLine = [];
         
-        let balance = currentNetWorth;
+        let totalBalance = currentNetWorth;
         let year = new Date().getFullYear();
         let fiYear = null;
+        let accessibleFiYear = null;
 
         // Calculate maxYears based on retirement age or user-specified years
         let maxYears;
@@ -1333,24 +1504,40 @@ class FITracker {
         }
         
         for (let i = 0; i <= maxYears; i++) {
-            labels.push(year + i);
-            data.push(balance);
+            const currentYear = year + i;
+            const ageAtYear = this.currentAge + i;
+            
+            labels.push(currentYear);
+            totalData.push(totalBalance);
+            
+            // Calculate accessible balance based on withdrawal ages
+            const accessibleBalance = this.calculateAccessibleBalance(totalBalance, ageAtYear, i);
+            accessibleData.push(accessibleBalance);
+            
             targetLine.push(this.fiTarget);
 
-            if (balance >= this.fiTarget && !fiYear) {
-                fiYear = year + i;
+            if (totalBalance >= this.fiTarget && !fiYear) {
+                fiYear = currentYear;
+            }
+            
+            if (accessibleBalance >= this.fiTarget && !accessibleFiYear) {
+                accessibleFiYear = currentYear;
             }
 
             // Compound interest + Contribution
-            balance = balance * (1 + this.annualReturn / 100) + (this.monthlyContribution * 12);
+            totalBalance = totalBalance * (1 + this.annualReturn / 100) + (this.monthlyContribution * 12);
         }
 
-        // Update FI Date Display
+        // Update FI Date Display - use accessible FI date as primary
         const dateEl = document.getElementById('projectedFiDate');
         if (dateEl) {
-            if (fiYear) {
+            if (accessibleFiYear) {
+                const yearsAway = accessibleFiYear - year;
+                dateEl.textContent = `${accessibleFiYear} (in ${yearsAway} years)`;
+            } else if (fiYear) {
                 const yearsAway = fiYear - year;
-                dateEl.textContent = `${fiYear} (in ${yearsAway} years)`;
+                dateEl.textContent = `${fiYear}* (in ${yearsAway} years)`;
+                dateEl.title = "* Total FI reached, but some funds may not be accessible yet";
             } else {
                 dateEl.textContent = `> ${year + maxYears}`;
             }
@@ -1367,8 +1554,17 @@ class FITracker {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Projected Net Worth',
-                        data: data,
+                        label: 'Total Net Worth',
+                        data: totalData,
+                        borderColor: '#94a3b8',
+                        backgroundColor: 'rgba(148, 163, 184, 0.05)',
+                        fill: false,
+                        tension: 0.4,
+                        borderDash: [5, 5]
+                    },
+                    {
+                        label: 'Accessible Net Worth',
+                        data: accessibleData,
                         borderColor: '#2ecc71',
                         backgroundColor: 'rgba(46, 204, 113, 0.1)',
                         fill: true,
@@ -1403,6 +1599,57 @@ class FITracker {
                                     label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
                                 }
                                 return label;
+                            },
+                            footer: function(tooltipItems) {
+                                if (tooltipItems.length > 0 && tooltipItems[0].label) {
+                                    const age = tooltipItems[0].label;
+                                    return `Age ${age}`;
+                                }
+                                return '';
+                            }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Accessible vs Total Net Worth Over Time',
+                        color: '#e5e7eb',
+                        font: {
+                            size: 14
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            color: '#e5e7eb',
+                            usePointStyle: true,
+                            padding: 15,
+                            font: {
+                                size: 11
+                            },
+                            generateLabels: function(chart) {
+                                const datasets = chart.data.datasets;
+                                return datasets.map((dataset, i) => {
+                                    let text = dataset.label;
+                                    if (dataset.label === 'Accessible Net Worth') {
+                                        text += ' (accounts you can access)';
+                                    } else if (dataset.label === 'Total Net Worth') {
+                                        text += ' (all accounts)';
+                                    }
+                                    return {
+                                        text: text,
+                                        fillStyle: dataset.borderColor,
+                                        hidden: !chart.isDatasetVisible(i),
+                                        lineCap: dataset.borderCapStyle,
+                                        lineDash: dataset.borderDash || [],
+                                        lineDashOffset: dataset.borderDashOffset,
+                                        lineJoin: dataset.borderJoinStyle,
+                                        lineWidth: dataset.borderWidth,
+                                        strokeStyle: dataset.borderColor,
+                                        pointStyle: dataset.pointStyle,
+                                        datasetIndex: i
+                                    };
+                                });
                             }
                         }
                     }
@@ -1420,6 +1667,44 @@ class FITracker {
                 }
             }
         });
+    }
+
+    // Calculate accessible balance at a given age
+    calculateAccessibleBalance(totalProjectedBalance, ageAtYear, yearsFromNow) {
+        let accessibleTotal = 0;
+        const currentTotal = this.calculateTotalNetWorth();
+        
+        // For each account, determine if it's accessible at this age
+        this.accounts.forEach(account => {
+            const withdrawalAge = account.withdrawalAge !== undefined ? account.withdrawalAge : this.getDefaultWithdrawalAge(account.type);
+            
+            // Project this account's growth
+            const accountProjectedBalance = account.balance * Math.pow(1 + this.annualReturn / 100, yearsFromNow);
+            
+            // Add to accessible if age requirement is met
+            if (ageAtYear >= withdrawalAge) {
+                accessibleTotal += accountProjectedBalance;
+            }
+        });
+        
+        // Add projected contributions (assume they go to accessible accounts like brokerage)
+        // Note: This assumes contributions go to immediately accessible accounts (e.g., brokerage)
+        // If users want different behavior, they can adjust their monthly contribution accordingly
+        if (yearsFromNow > 0 && this.monthlyContribution > 0) {
+            if (this.annualReturn === 0) {
+                // No growth - just sum the contributions
+                accessibleTotal += this.monthlyContribution * 12 * yearsFromNow;
+            } else {
+                // Future value of annuity formula: FV = PMT * [((1 + r)^n - 1) / r]
+                // where PMT is monthly payment, r is monthly rate, n is number of months
+                const monthlyRate = this.annualReturn / 100 / 12;
+                const months = yearsFromNow * 12;
+                const contributionsFV = this.monthlyContribution * (Math.pow(1 + monthlyRate, months) - 1) / monthlyRate;
+                accessibleTotal += contributionsFV;
+            }
+        }
+        
+        return accessibleTotal;
     }
 
     // ===== Card Ordering and Drag-and-Drop =====
@@ -1699,8 +1984,5 @@ class FITracker {
     }
 }
 
-// Initialize app
-let tracker;
-document.addEventListener('DOMContentLoaded', () => {
-    tracker = new FITracker();
-});
+// Initialize app immediately since script loads at end of body
+window.tracker = new FITracker();

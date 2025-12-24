@@ -270,6 +270,10 @@ class FITracker {
                 if (e.target.classList.contains('edit-withdrawal-age')) {
                     const accountId = e.target.dataset.accountId;
                     this.editWithdrawalAge(accountId);
+                } else if (e.target.classList.contains('reset-withdrawal-age')) {
+                    const accountId = e.target.dataset.accountId;
+                    const defaultAge = parseFloat(e.target.dataset.defaultAge);
+                    this.resetWithdrawalAge(accountId, defaultAge);
                 }
             });
         }
@@ -782,18 +786,19 @@ class FITracker {
         
         if (!displayElement) return;
 
-        // Create input field
-        const currentDisplay = currentAge === 0 ? '' : currentAge.toString();
+        // Create input field with better placeholder
+        const currentDisplay = currentAge <= this.currentAge ? '' : currentAge.toString();
         const input = document.createElement('input');
         input.type = 'number';
         input.value = currentDisplay;
-        input.placeholder = currentAge === 0 ? 'Now' : 'Age';
+        input.placeholder = currentAge <= this.currentAge ? 'Now (or enter age)' : 'Age';
         input.min = '0';
         input.max = '100';
         input.step = '0.5';
-        input.style.width = '80px';
+        input.style.width = '120px';
         input.style.padding = '4px';
         input.style.marginRight = '8px';
+        input.title = `Enter age when accessible (leave empty or enter ${this.currentAge} or less for "Now")`;
 
         // Create save button
         const saveBtn = document.createElement('button');
@@ -821,7 +826,8 @@ class FITracker {
             let withdrawalAge;
             
             if (newValue === '') {
-                withdrawalAge = 0; // Empty means "Now" (immediately accessible)
+                // Empty means current age or less (immediately accessible)
+                withdrawalAge = Math.min(0, this.currentAge);
             } else {
                 withdrawalAge = parseFloat(newValue);
                 if (isNaN(withdrawalAge) || withdrawalAge < 0 || withdrawalAge > 100) {
@@ -855,6 +861,19 @@ class FITracker {
                 cancelHandler();
             }
         });
+    }
+
+    resetWithdrawalAge(id, defaultAge) {
+        const account = this.accounts.find(acc => String(acc.id) === String(id));
+        if (!account) return;
+
+        if (confirm(`Reset withdrawal age to default (${defaultAge <= this.currentAge ? 'Now' : defaultAge})?`)) {
+            account.withdrawalAge = defaultAge;
+            account.lastUpdated = new Date().toISOString();
+            this.saveData();
+            this.updateDashboard();
+            this.showNotification('Withdrawal age reset to default');
+        }
     }
 
     // ===== Dashboard Updates =====
@@ -1034,7 +1053,9 @@ class FITracker {
                 const percentage = totalNetWorth > 0 ? (account.balance / totalNetWorth * 100).toFixed(1) : 0;
                 const lastUpdated = account.lastUpdated ? new Date(account.lastUpdated).toLocaleDateString() : 'N/A';
                 const withdrawalAge = account.withdrawalAge !== undefined ? account.withdrawalAge : this.getDefaultWithdrawalAge(account.type);
-                const withdrawalAgeDisplay = withdrawalAge === 0 ? 'Now' : withdrawalAge;
+                // Show "Now" if withdrawal age is <= current age (immediately accessible)
+                const withdrawalAgeDisplay = (withdrawalAge <= this.currentAge) ? 'Now' : withdrawalAge;
+                const defaultAge = this.getDefaultWithdrawalAge(account.type);
                 
                 html += `
                     <tr>
@@ -1045,8 +1066,9 @@ class FITracker {
                         <td><span class="account-type-badge ${account.type}">${this.formatAccountType(account.type)}</span></td>
                         <td>${this.formatCurrency(account.balance)}</td>
                         <td>
-                            <span id="withdrawal-age-display-${account.id}">${withdrawalAgeDisplay}</span>
-                            <button class="btn btn-secondary btn-sm edit-withdrawal-age" style="margin-left: 8px;" data-account-id="${account.id}">Edit</button>
+                            <span id="withdrawal-age-display-${account.id}" title="Age when you can access this account penalty-free">${withdrawalAgeDisplay}</span>
+                            <button class="btn btn-secondary btn-sm edit-withdrawal-age" style="margin-left: 8px;" data-account-id="${account.id}" title="Edit withdrawal age">Edit</button>
+                            <button class="btn btn-secondary btn-sm reset-withdrawal-age" style="margin-left: 4px;" data-account-id="${account.id}" data-default-age="${defaultAge}" title="Reset to default (${defaultAge <= this.currentAge ? 'Now' : defaultAge})">Reset</button>
                         </td>
                         <td>${percentage}%</td>
                         <td>
@@ -1577,6 +1599,57 @@ class FITracker {
                                     label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
                                 }
                                 return label;
+                            },
+                            footer: function(tooltipItems) {
+                                if (tooltipItems.length > 0 && tooltipItems[0].label) {
+                                    const age = tooltipItems[0].label;
+                                    return `Age ${age}`;
+                                }
+                                return '';
+                            }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Accessible vs Total Net Worth Over Time',
+                        color: '#e5e7eb',
+                        font: {
+                            size: 14
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            color: '#e5e7eb',
+                            usePointStyle: true,
+                            padding: 15,
+                            font: {
+                                size: 11
+                            },
+                            generateLabels: function(chart) {
+                                const datasets = chart.data.datasets;
+                                return datasets.map((dataset, i) => {
+                                    let text = dataset.label;
+                                    if (dataset.label === 'Accessible Net Worth') {
+                                        text += ' (accounts you can access)';
+                                    } else if (dataset.label === 'Total Net Worth') {
+                                        text += ' (all accounts)';
+                                    }
+                                    return {
+                                        text: text,
+                                        fillStyle: dataset.borderColor,
+                                        hidden: !chart.isDatasetVisible(i),
+                                        lineCap: dataset.borderCapStyle,
+                                        lineDash: dataset.borderDash || [],
+                                        lineDashOffset: dataset.borderDashOffset,
+                                        lineJoin: dataset.borderJoinStyle,
+                                        lineWidth: dataset.borderWidth,
+                                        strokeStyle: dataset.borderColor,
+                                        pointStyle: dataset.pointStyle,
+                                        datasetIndex: i
+                                    };
+                                });
                             }
                         }
                     }

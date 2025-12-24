@@ -111,7 +111,6 @@ header h1 {
     border-bottom: none;
     margin-bottom: 0;
     padding-bottom: 0;
-    flex: 1;
 }
 
 .drag-handle {

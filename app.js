@@ -1454,7 +1454,7 @@ class FITracker {
                 draggedCard = card;
                 card.classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/html', card.innerHTML);
+                e.dataTransfer.setData('text/plain', card.getAttribute('data-card-id'));
             });
 
             card.addEventListener('dragend', (e) => {
@@ -1488,7 +1488,12 @@ class FITracker {
                     if (e.clientY < midpoint) {
                         container.insertBefore(draggedCard, card);
                     } else {
-                        container.insertBefore(draggedCard, card.nextSibling);
+                        // Insert after - use nextSibling if it exists, otherwise append
+                        if (card.nextSibling) {
+                            container.insertBefore(draggedCard, card.nextSibling);
+                        } else {
+                            container.appendChild(draggedCard);
+                        }
                     }
                     
                     this.saveCardOrder();

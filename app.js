@@ -18,6 +18,7 @@ class FITracker {
 
         this.history = []; // Historical Net Worth snapshots
         this.cardOrder = []; // Order of cards
+        this.cardStates = {}; // Collapse/expand state for each card
 
         this.chart = null;
         this.projectionChart = null;
@@ -28,6 +29,7 @@ class FITracker {
         this.initializeEventListeners();
         this.initializeDragAndDrop();
         this.restoreCardOrder();
+        this.restoreCardStates();
         this.updateDashboard();
     }
 
@@ -44,6 +46,7 @@ class FITracker {
                 this.penaltyFreeAge = data.penaltyFreeAge !== undefined ? data.penaltyFreeAge : 59.5;
                 this.history = data.history || [];
                 this.cardOrder = data.cardOrder || [];
+                this.cardStates = data.cardStates || {};
                 
                 // Load Projections
                 this.monthlyContribution = data.monthlyContribution !== undefined ? data.monthlyContribution : 2000;
@@ -84,6 +87,7 @@ class FITracker {
             penaltyFreeAge: this.penaltyFreeAge,
             history: this.history,
             cardOrder: this.cardOrder,
+            cardStates: this.cardStates,
             
             // Save Projections
             monthlyContribution: this.monthlyContribution,
@@ -192,6 +196,7 @@ class FITracker {
             header.addEventListener('click', () => {
                 const card = header.parentElement;
                 card.classList.toggle('collapsed');
+                this.saveCardState(card);
             });
         });
 
@@ -1804,6 +1809,7 @@ class FITracker {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.remove('collapsed');
+            this.saveCardState(card);
         });
     }
 
@@ -1811,6 +1817,31 @@ class FITracker {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.add('collapsed');
+            this.saveCardState(card);
+        });
+    }
+
+    saveCardState(card) {
+        const cardId = card.getAttribute('data-card-id');
+        if (cardId) {
+            this.cardStates[cardId] = {
+                collapsed: card.classList.contains('collapsed')
+            };
+            this.saveData();
+        }
+    }
+
+    restoreCardStates() {
+        const cards = document.querySelectorAll('.card.collapsible[data-card-id]');
+        cards.forEach(card => {
+            const cardId = card.getAttribute('data-card-id');
+            if (cardId && this.cardStates[cardId]) {
+                if (this.cardStates[cardId].collapsed) {
+                    card.classList.add('collapsed');
+                } else {
+                    card.classList.remove('collapsed');
+                }
+            }
         });
     }
 

@@ -16,6 +16,7 @@ class FITracker {
         this.projectionYears = null; // null means auto-calculate
 
         this.history = []; // Historical Net Worth snapshots
+        this.cardOrder = []; // Order of cards
 
         this.chart = null;
         this.projectionChart = null;
@@ -23,6 +24,8 @@ class FITracker {
         
         this.loadData();
         this.initializeEventListeners();
+        this.initializeDragAndDrop();
+        this.restoreCardOrder();
         this.updateDashboard();
     }
 
@@ -37,6 +40,7 @@ class FITracker {
                 this.withdrawalRate = data.withdrawalRate || 4;
                 this.annualExpenses = data.annualExpenses || 40000;
                 this.history = data.history || [];
+                this.cardOrder = data.cardOrder || [];
                 
                 // Load Projections
                 this.monthlyContribution = data.monthlyContribution !== undefined ? data.monthlyContribution : 2000;
@@ -74,6 +78,7 @@ class FITracker {
             withdrawalRate: this.withdrawalRate,
             annualExpenses: this.annualExpenses,
             history: this.history,
+            cardOrder: this.cardOrder,
             
             // Save Projections
             monthlyContribution: this.monthlyContribution,
@@ -228,6 +233,18 @@ class FITracker {
         });
 
         document.getElementById('addHistoryEntry').addEventListener('click', () => this.addHistoryEntry());
+
+        // Expand/Collapse All Buttons
+        const expandAllBtn = document.getElementById('expandAll');
+        const collapseAllBtn = document.getElementById('collapseAll');
+        
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', () => this.expandAllCards());
+        }
+        
+        if (collapseAllBtn) {
+            collapseAllBtn.addEventListener('click', () => this.collapseAllCards());
+        }
     }
 
     // ===== FI Configuration =====
@@ -1421,6 +1438,108 @@ class FITracker {
                     }
                 }
             }
+        });
+    }
+
+    // ===== Card Ordering and Drag-and-Drop =====
+    initializeDragAndDrop() {
+        const container = document.getElementById('cards-container');
+        if (!container) return;
+
+        const cards = container.querySelectorAll('.card.collapsible[draggable="true"]');
+        let draggedCard = null;
+
+        cards.forEach(card => {
+            card.addEventListener('dragstart', (e) => {
+                draggedCard = card;
+                card.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', card.innerHTML);
+            });
+
+            card.addEventListener('dragend', (e) => {
+                card.classList.remove('dragging');
+                // Remove all drag-over classes
+                cards.forEach(c => c.classList.remove('drag-over'));
+            });
+
+            card.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                
+                if (draggedCard && draggedCard !== card) {
+                    card.classList.add('drag-over');
+                }
+            });
+
+            card.addEventListener('dragleave', (e) => {
+                card.classList.remove('drag-over');
+            });
+
+            card.addEventListener('drop', (e) => {
+                e.preventDefault();
+                card.classList.remove('drag-over');
+                
+                if (draggedCard && draggedCard !== card) {
+                    // Determine if we should insert before or after
+                    const rect = card.getBoundingClientRect();
+                    const midpoint = rect.top + rect.height / 2;
+                    
+                    if (e.clientY < midpoint) {
+                        container.insertBefore(draggedCard, card);
+                    } else {
+                        container.insertBefore(draggedCard, card.nextSibling);
+                    }
+                    
+                    this.saveCardOrder();
+                }
+            });
+        });
+    }
+
+    saveCardOrder() {
+        const container = document.getElementById('cards-container');
+        if (!container) return;
+
+        const cards = container.querySelectorAll('.card.collapsible[data-card-id]');
+        this.cardOrder = Array.from(cards).map(card => card.getAttribute('data-card-id'));
+        this.saveData();
+    }
+
+    restoreCardOrder() {
+        if (!this.cardOrder || this.cardOrder.length === 0) return;
+
+        const container = document.getElementById('cards-container');
+        if (!container) return;
+
+        const cards = Array.from(container.querySelectorAll('.card.collapsible[data-card-id]'));
+        const cardMap = new Map();
+        
+        cards.forEach(card => {
+            const id = card.getAttribute('data-card-id');
+            if (id) cardMap.set(id, card);
+        });
+
+        // Reorder based on saved order
+        this.cardOrder.forEach(cardId => {
+            const card = cardMap.get(cardId);
+            if (card) {
+                container.appendChild(card);
+            }
+        });
+    }
+
+    expandAllCards() {
+        const cards = document.querySelectorAll('.card.collapsible');
+        cards.forEach(card => {
+            card.classList.remove('collapsed');
+        });
+    }
+
+    collapseAllCards() {
+        const cards = document.querySelectorAll('.card.collapsible');
+        cards.forEach(card => {
+            card.classList.add('collapsed');
         });
     }
 }

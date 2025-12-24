@@ -1809,25 +1809,29 @@ class FITracker {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.remove('collapsed');
-            this.saveCardState(card);
+            this.saveCardState(card, false); // Skip individual saves
         });
+        this.saveData(); // Single save after all cards updated
     }
 
     collapseAllCards() {
         const cards = document.querySelectorAll('.card.collapsible');
         cards.forEach(card => {
             card.classList.add('collapsed');
-            this.saveCardState(card);
+            this.saveCardState(card, false); // Skip individual saves
         });
+        this.saveData(); // Single save after all cards updated
     }
 
-    saveCardState(card) {
+    saveCardState(card, save = true) {
         const cardId = card.getAttribute('data-card-id');
         if (cardId) {
             this.cardStates[cardId] = {
                 collapsed: card.classList.contains('collapsed')
             };
-            this.saveData();
+            if (save) {
+                this.saveData();
+            }
         }
     }
 
